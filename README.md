@@ -138,7 +138,7 @@ All articles present naturally! ✅
 - Grammar emerges naturally from proper tokenization
 
 **Solution:**
-- Reduce vocabulary from 32K to 4K (Karpathy's tokenizer)
+- Train custom 10K tokenizer on TinyStories data
 - Use standard cross-entropy loss
 - Train until validation loss <2.0
 - Articles appear naturally!
@@ -167,15 +167,15 @@ llm_tinystories/
 ├── README.md                          ← You are here
 ├── train.py                           ← Training script (standard loss)
 ├── generate.py                        ← Text generation
-├── train_custom_tokenizer.py         ← Optional: train custom tokenizer
+├── train_custom_tokenizer.py         ← Train custom 10K tokenizer
+├── start_training.ps1                 ← Quick start script for Windows
 │
 ├── config/
-│   ├── train_config_33M_KARPATHY_TOKENIZER.yaml  ← Recommended config!
-│   └── train_config_tinystories_33M_TOP10K.yaml  ← Alternative: custom tokenizer
+│   └── train_config_tinystories_33M_TOP10K.yaml  ← Main config (10K vocab)
 │
 ├── docs/
-│   ├── QUICK_START_PRETRAINED_TOKENIZER.md       ← Complete guide (START HERE!)
-│   ├── TRAINING_GUIDE_TOP10K.md                  ← Detailed training guide
+│   ├── TRAINING_GUIDE_TOP10K.md                  ← Detailed training guide (START HERE!)
+│   ├── CONFIGURATION_AUDIT_REPORT.md             ← Configuration verification
 │   ├── RESEARCH_SUMMARY_AND_RECOMMENDATIONS.md   ← Research summary
 │   ├── WEIGHTED_LOSS_VS_STANDARD_ANALYSIS.md     ← Why standard works
 │   └── TINYSTORIES_USERS_RESEARCH.md             ← Who uses TinyStories
@@ -192,7 +192,7 @@ llm_tinystories/
 
 ### Model Architecture
 - **Type:** Llama 2-style decoder-only transformer
-- **Parameters:** ~21M (with 4K vocab) or ~23.5M (with 10K vocab)
+- **Parameters:** ~23.5M (with 10K vocab, down from 33M with 32K)
 - **Layers:** 7
 - **Hidden Dim:** 448
 - **Heads:** 7
@@ -222,9 +222,9 @@ llm_tinystories/
 
 **A:** Too many tokens, too little exposure per token
 - 32K vocab wastes 22K tokens never in TinyStories
-- Articles get 1/8 the exposure vs 4K vocab
+- Articles get 1/3 the exposure vs 10K vocab
 - Model capacity diluted across irrelevant tokens
-- Would need 5-10× longer training to compensate
+- Would need 3-5× longer training to compensate
 
 ### Q: Do I need weighted loss?
 
@@ -246,8 +246,8 @@ llm_tinystories/
 
 **A:** Very unlikely (<5% chance), but checklist:
 1. ✅ Deleted old cache?
-2. ✅ Using correct tokenizer (4K or 10K vocab)?
-3. ✅ Config points to correct tokenizer path?
+2. ✅ Using custom 10K tokenizer?
+3. ✅ Config points to ./tokenizer/tinystories_10k?
 4. ✅ Trained until loss <2.0?
 5. ✅ Testing final checkpoint, not early one?
 
@@ -257,10 +257,10 @@ If all above YES and still failing, post logs for investigation.
 
 ## 🚀 Next Steps
 
-1. **Read:** QUICK_START_PRETRAINED_TOKENIZER.md
-2. **Download:** Karpathy's tokenizer (2 minutes)
+1. **Read:** TRAINING_GUIDE_TOP10K.md
+2. **Train Tokenizer:** Run train_custom_tokenizer.py (30-60 minutes)
 3. **Clean:** Delete old cache
-4. **Train:** Start training (30-40 hours)
+4. **Train:** Run start_training.ps1 (30-40 hours)
 5. **Test:** Generate and verify articles present
 6. **Celebrate:** You now have a working TinyStories model! 🎉
 
