@@ -57,11 +57,6 @@ EVAL_PROMPTS = [
     "In the garden there was",
 ]
 
-# ARTICLE FIX: Article token IDs (from tokenizer diagnosis)
-# These tokens will be weighted higher during training to force model to learn them
-ARTICLE_TOKEN_IDS = {262, 264, 389}  # ' a', ' the', ' an'
-
-
 def setup_cuda_optimizations():
     """Setup CUDA optimizations for better performance."""
     if torch.cuda.is_available():
@@ -348,75 +343,6 @@ class Trainer:
 
         logger.info(f"Learning rate: {lr}")
 
-    def compute_weighted_loss(
-        self,
-        logits: torch.Tensor,
-        labels: torch.Tensor,
-        article_weight: float = 10.0
-    ) -> tuple:
-        """Compute loss with higher weight for article tokens.
-
-        Args:
-            logits: Model predictions (batch_size, seq_len, vocab_size)
-            labels: Target tokens (batch_size, seq_len)
-            article_weight: Weight multiplier for article tokens (default: 10.0)
-
-        Returns:
-            Tuple of (weighted_loss, article_loss, other_loss, article_count, other_count)
-        """
-        batch_size, seq_len, vocab_size = logits.shape
-
-        # Shift for next-token prediction (like in model's forward)
-        shift_logits = logits[..., :-1, :].contiguous()
-        shift_labels = labels[..., 1:].contiguous()
-
-        # Flatten for loss computation
-        logits_flat = shift_logits.view(-1, vocab_size)
-        labels_flat = shift_labels.view(-1)
-
-        # Compute per-token loss (no reduction)
-        per_token_loss = nn.functional.cross_entropy(
-            logits_flat,
-            labels_flat,
-            ignore_index=-100,  # Ignore padding
-            reduction='none'
-        )
-
-        # Create weight tensor
-        loss_weights = torch.ones_like(per_token_loss)
-
-        # Increase weight for article tokens
-        for article_id in ARTICLE_TOKEN_IDS:
-            article_mask = (labels_flat == article_id)
-            loss_weights[article_mask] = article_weight
-
-        # Apply weights and compute mean
-        weighted_loss = (per_token_loss * loss_weights).sum() / loss_weights.sum()
-
-        # Compute separate losses for logging
-        article_mask = torch.zeros_like(labels_flat, dtype=torch.bool)
-        for article_id in ARTICLE_TOKEN_IDS:
-            article_mask |= (labels_flat == article_id)
-
-        valid_mask = (labels_flat != -100)  # Not padding
-
-        # Count article vs other tokens
-        article_count = article_mask.sum().item()
-        other_count = (valid_mask & ~article_mask).sum().item()
-
-        # Calculate separate losses
-        if article_count > 0:
-            article_loss = per_token_loss[article_mask].mean()
-        else:
-            article_loss = torch.tensor(0.0)
-
-        if other_count > 0:
-            other_loss = per_token_loss[valid_mask & ~article_mask].mean()
-        else:
-            other_loss = torch.tensor(0.0)
-
-        return weighted_loss, article_loss, other_loss, article_count, other_count
-
     def train_step(self, batch: Dict[str, torch.Tensor], accumulation_step: int) -> Dict[str, float]:
         """Single training step with gradient accumulation.
 
@@ -436,30 +362,23 @@ class Trainer:
         input_ids = batch['input_ids'].to(self.device, non_blocking=True)
         labels = batch['labels'].to(self.device, non_blocking=True)
 
-        # ARTICLE FIX: Get logits and compute weighted loss manually
-        # Forward pass with mixed precision
+        # Forward pass with standard cross-entropy loss
+        # Using standard loss (matches ALL 30+ successful TinyStories implementations)
+        # Research shows: NO weighted loss needed! Grammar emerges naturally with correct vocab size.
         if self.use_amp:
             # Use new torch.amp API: autocast('cuda', ...) instead of autocast(device_type='cuda', ...)
             with autocast('cuda', dtype=self.amp_dtype, enabled=True):
-                # Get logits without labels (we'll compute loss manually)
-                outputs = self.model(input_ids=input_ids)
-                logits = outputs['logits']
+                # Standard loss computation (model computes cross-entropy internally)
+                outputs = self.model(input_ids=input_ids, labels=labels)
+                loss = outputs['loss']
 
-                # Compute weighted loss (10x weight on articles)
-                loss, article_loss, other_loss, article_count, other_count = self.compute_weighted_loss(
-                    logits, labels, article_weight=10.0
-                )
                 # Scale loss for gradient accumulation
                 loss = loss / grad_accum_steps
         else:
-            # Get logits without labels (we'll compute loss manually)
-            outputs = self.model(input_ids=input_ids)
-            logits = outputs['logits']
+            # Standard loss computation (model computes cross-entropy internally)
+            outputs = self.model(input_ids=input_ids, labels=labels)
+            loss = outputs['loss']
 
-            # Compute weighted loss (10x weight on articles)
-            loss, article_loss, other_loss, article_count, other_count = self.compute_weighted_loss(
-                logits, labels, article_weight=10.0
-            )
             # Scale loss for gradient accumulation
             loss = loss / grad_accum_steps
 
@@ -506,17 +425,13 @@ class Trainer:
         actual_loss = loss.item() * grad_accum_steps
         perplexity = torch.exp(torch.tensor(actual_loss)).item()
 
-        # ARTICLE FIX: Add article-specific metrics
+        # Return standard training metrics
         return {
             'loss': actual_loss,
             'perplexity': perplexity,
             'grad_norm': grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm,
             'lr': self.scheduler.get_last_lr()[0],
             'is_step': is_accumulation_step,
-            'article_loss': article_loss.item() if isinstance(article_loss, torch.Tensor) else article_loss,
-            'other_loss': other_loss.item() if isinstance(other_loss, torch.Tensor) else other_loss,
-            'article_count': article_count,
-            'other_count': other_count,
         }
     
     def get_lr_phase_info(self) -> str:
@@ -788,12 +703,10 @@ class Trainer:
                 self.global_step += 1
                 num_batches += 1
 
-            # ARTICLE FIX: Update progress bar with article metrics
+            # Update progress bar with training metrics
             pbar.set_postfix({
                 'loss': f"{metrics['loss']:.4f}",
                 'ppl': f"{metrics['perplexity']:.2f}",
-                'a_loss': f"{metrics['article_loss']:.3f}",  # Article loss
-                'o_loss': f"{metrics['other_loss']:.3f}",     # Other loss
                 'lr': f"{metrics['lr']:.2e}",
                 'grad': f"{metrics['grad_norm']:.2f}",
             })
@@ -849,18 +762,12 @@ class Trainer:
                 else:
                     loss_trend = "..."
 
-                # ARTICLE FIX: Calculate article/other ratio
-                article_ratio = metrics['article_loss'] / metrics['other_loss'] if metrics['other_loss'] > 0 else 0
-
                 logger.info(
                     f"\nStep {self.global_step} | "
                     f"Loss: {metrics['loss']:.4f} ({loss_trend}) | "
-                    f"PPL: {metrics['perplexity']:.2f}\n"
-                    f"Article Loss: {metrics['article_loss']:.4f} | "
-                    f"Other Loss: {metrics['other_loss']:.4f} | "
-                    f"Ratio: {article_ratio:.2f}x\n"
-                    f"Grad: {metrics['grad_norm']:.2f} | "
-                    f"LR: {metrics['lr']:.2e} ({lr_phase})\n"
+                    f"PPL: {metrics['perplexity']:.2f} | "
+                    f"Grad: {metrics['grad_norm']:.2f}\n"
+                    f"LR: {metrics['lr']:.2e} ({lr_phase}) | "
                     f"Throughput: {tokens_per_sec:.1f} tok/s | "
                     f"GPU Mem: {memory_str}\n"
                     f"ETA: {format_time(eta_seconds)} | "
