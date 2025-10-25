@@ -7,22 +7,23 @@ Training small language models on the TinyStories dataset with proven, research-
 ## 🚀 Quick Start (Recommended Path)
 
 **Problem:** Model not generating articles ("a", "the", "an")
-**Root Cause:** Vocabulary size too large (32K instead of 4K-10K)
-**Solution:** Use proven tokenizer with optimal vocabulary size
+**Root Cause:** Vocabulary size too large (32K instead of 10K)
+**Solution:** Train custom 10K tokenizer optimized for TinyStories
 
-### Fastest Path to Success (2 minutes setup)
+### Complete Setup (60 minutes total)
 
 ```bash
-# 1. Download proven tokenizer (Karpathy's 4096-vocab)
-mkdir -p ./tokenizer/llama2c_tinystories
-wget https://github.com/karpathy/llama2.c/raw/master/tokenizer.model \
-  -O ./tokenizer/llama2c_tinystories/tokenizer.model
+# 1. Train custom 10K tokenizer (30-60 minutes)
+python train_custom_tokenizer.py \
+  --vocab_size 10000 \
+  --output_dir ./tokenizer/tinystories_10k \
+  --max_samples 100000
 
 # 2. Clean old cache (was using wrong 32K tokenizer)
 rm -rf ./data/cache/*
 
 # 3. Start training (30-40 hours on RTX 5090)
-python train.py --config config/train_config_33M_KARPATHY_TOKENIZER.yaml
+python train.py --config config/train_config_tinystories_33M_TOP10K.yaml
 
 # 4. Test when done
 python generate.py --checkpoint checkpoints/checkpoint_latest.pth
@@ -41,8 +42,8 @@ Output: a little girl named Lily. She was 3 years old...
 ## 📋 Key Documents
 
 ### Start Here
-1. **QUICK_START_PRETRAINED_TOKENIZER.md** ⭐ - Complete guide for using Karpathy's tokenizer
-2. **TRAINING_GUIDE_TOP10K.md** - Detailed training guide and methodology
+1. **TRAINING_GUIDE_TOP10K.md** ⭐ - Complete training guide with custom 10K tokenizer
+2. **train_custom_tokenizer.py** - Script to train your own optimized tokenizer
 
 ### Research & Analysis
 3. **RESEARCH_SUMMARY_AND_RECOMMENDATIONS.md** - Executive summary and action plan
@@ -63,10 +64,10 @@ Result: Model rarely sees articles, doesn't learn them ❌
 
 ### The Solution (Proven Approach)
 ```
-Vocabulary: 4,096 tokens (Karpathy's tokenizer)
+Vocabulary: 10,000 tokens (Custom TinyStories tokenizer)
 Articles (a, the, an): 3 tokens
-Article exposure: 3/4,096 = 0.073%
-Result: 8× more exposure, articles learned naturally ✅
+Article exposure: 3/10,000 = 0.030%
+Result: 3× more exposure, articles learned naturally ✅
 ```
 
 ### Research Evidence
@@ -87,29 +88,8 @@ Result: 8× more exposure, articles learned naturally ✅
 | 5 | 1.3 | **8-9/10** | **Always** ✅ |
 
 **Training Time:** 30-40 hours on RTX 5090
-**Final Model:** ~21M parameters (vs 33M with 32K vocab)
-**Savings:** 12M parameters freed from embeddings!
-
----
-
-## 🔧 Alternative: Train Custom Tokenizer
-
-If you prefer to train your own 10K tokenizer:
-
-```bash
-# 1. Train tokenizer (30-60 minutes)
-python train_custom_tokenizer.py \
-  --vocab_size 10000 \
-  --output_dir ./tokenizer/tinystories_10k
-
-# 2. Clean cache
-rm -rf ./data/cache/*
-
-# 3. Train with custom tokenizer config
-python train.py --config config/train_config_tinystories_33M_TOP10K.yaml
-```
-
-**Same results, but takes 1 hour longer on day 1.**
+**Final Model:** ~23.5M parameters (vs 33M with 32K vocab)
+**Savings:** 9.5M parameters freed from embeddings!
 
 ---
 
