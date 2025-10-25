@@ -216,10 +216,21 @@ class TokenizerWrapper:
         self.tokenizer = tokenizer
         self._vocab_size = tokenizer.get_vocab_size()
 
-        # Get special token IDs
-        self.pad_token_id = tokenizer.token_to_id("<pad>")
-        self.bos_token_id = tokenizer.token_to_id("<s>")
-        self.eos_token_id = tokenizer.token_to_id("</s>")
+        # Get special token IDs - support multiple formats
+        # Try standard format first, then TinyStories custom format
+        self.pad_token_id = (
+            tokenizer.token_to_id("<pad>") or
+            tokenizer.token_to_id("<|padding|>") or
+            0  # Fallback to 0 if not found
+        )
+        self.bos_token_id = (
+            tokenizer.token_to_id("<s>") or
+            tokenizer.token_to_id("<|startoftext|>")
+        )
+        self.eos_token_id = (
+            tokenizer.token_to_id("</s>") or
+            tokenizer.token_to_id("<|endoftext|>")
+        )
         self.unk_token_id = tokenizer.token_to_id("<unk>")
 
     def __call__(self, text, **kwargs):
