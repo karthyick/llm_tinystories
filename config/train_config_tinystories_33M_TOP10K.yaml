@@ -34,10 +34,10 @@ training:
   output_dir: "./checkpoints"
 
 optimizer:
-  learning_rate: 5e-4      # ✅ CRITICAL! Most important parameter
+  learning_rate: 0.0005    # ✅ CRITICAL! Most important parameter (5e-4)
   adam_beta1: 0.9          # ✅ Official
   adam_beta2: 0.95         # ✅ Official
-  adam_epsilon: 1e-8
+  adam_epsilon: 0.00000001 # 1e-8
   weight_decay: 0.1        # ✅ Official
   max_grad_norm: 1.0
 
@@ -45,7 +45,7 @@ scheduler:
   type: cosine             # ✅ Research shows cosine > constant
   warmup_steps: 100
   lr_decay_iters: 35000    # ✅ Should match total training steps (~5 epochs)
-  min_lr: 5e-5            # ✅ learning_rate / 10
+  min_lr: 0.00005          # ✅ learning_rate / 10 (5e-5)
 
 data:
   dataset: "tinystories"
