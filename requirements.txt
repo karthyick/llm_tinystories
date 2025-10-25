@@ -1,0 +1,36 @@
+# Core Dependencies
+torch>=2.6.0
+torchvision>=0.20.0
+numpy>=1.26.0
+
+# Tokenization
+tokenizers>=0.19.1
+transformers>=4.45.0
+
+# Data Processing
+datasets>=2.14.0
+pyarrow>=15.0.0
+
+# Training Utilities
+tqdm>=4.66.0
+tensorboard>=2.15.0
+wandb>=0.16.0
+
+# Configuration
+omegaconf>=2.3.0
+pyyaml>=6.0.1
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0
+
+# Optimization (Optional)
+# flash-attn>=2.6.0  # Install separately: pip install flash-attn --no-build-isolation
+# liger-kernel>=0.3.0  # For fused operations
+# bitsandbytes>=0.43.0  # For 8-bit optimizers
+
+# Development Tools
+black>=24.0.0
+isort>=5.13.0
+flake8>=7.0.0
+mypy>=1.8.0
