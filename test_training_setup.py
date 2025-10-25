@@ -94,7 +94,8 @@ def test_config():
 
         # Verify expected values
         assert critical_params['vocab_size'] == 10000, f"vocab_size should be 10000, got {critical_params['vocab_size']}"
-        assert critical_params['learning_rate'] == 5e-4, f"learning_rate should be 5e-4, got {critical_params['learning_rate']}"
+        # Use approximate comparison for float (YAML may parse as 0.0005)
+        assert abs(critical_params['learning_rate'] - 5e-4) < 1e-10, f"learning_rate should be 5e-4, got {critical_params['learning_rate']}"
         assert critical_params['tokenizer_path'] == "./tokenizer/tinystories_10k", f"Wrong tokenizer path"
 
         print("   ✅ All critical parameters correct")
@@ -115,7 +116,7 @@ def test_model_creation():
 
     try:
         import yaml
-        from src.model.llama import LlamaModel
+        from src.model.transformer_block import WikiMiniModel
 
         with open("config/train_config_tinystories_33M_TOP10K.yaml") as f:
             config = yaml.safe_load(f)
@@ -127,7 +128,7 @@ def test_model_creation():
         print(f"   d_model: {model_config['d_model']}")
         print(f"   n_layers: {model_config['n_layers']}")
 
-        model = LlamaModel(model_config)
+        model = WikiMiniModel(model_config)
 
         # Count parameters
         total_params = sum(p.numel() for p in model.parameters())
