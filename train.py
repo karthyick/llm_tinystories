@@ -445,9 +445,9 @@ class Trainer:
                 outputs = self.model(input_ids=input_ids)
                 logits = outputs['logits']
 
-                # Compute weighted loss (10x weight on articles)
+                # Compute weighted loss (5x weight on articles - conservative to avoid overfitting)
                 loss, article_loss, other_loss, article_count, other_count = self.compute_weighted_loss(
-                    logits, labels, article_weight=10.0
+                    logits, labels, article_weight=5.0
                 )
                 # Scale loss for gradient accumulation
                 loss = loss / grad_accum_steps
@@ -456,9 +456,9 @@ class Trainer:
             outputs = self.model(input_ids=input_ids)
             logits = outputs['logits']
 
-            # Compute weighted loss (10x weight on articles)
+            # Compute weighted loss (5x weight on articles - conservative to avoid overfitting)
             loss, article_loss, other_loss, article_count, other_count = self.compute_weighted_loss(
-                logits, labels, article_weight=10.0
+                logits, labels, article_weight=5.0
             )
             # Scale loss for gradient accumulation
             loss = loss / grad_accum_steps

@@ -2,7 +2,7 @@
 
 ## 🎯 Problem Solved
 
-Your training script (`train.py`) has been **modified to weight article tokens 10x higher** during training. This forces the model to learn articles instead of ignoring them.
+Your training script (`train.py`) has been **modified to weight article tokens 5x higher** during training. This forces the model to learn articles instead of ignoring them, while avoiding overfitting to articles.
 
 ---
 
@@ -18,7 +18,7 @@ ARTICLE_TOKEN_IDS = {262, 264, 389}  # ' a', ' the', ' an'
 ### 2. Added Weighted Loss Function (Lines 351-418)
 New method `compute_weighted_loss()` in Trainer class:
 - Computes standard cross-entropy loss per token
-- Multiplies loss by 10x for article tokens (262, 264, 389)
+- Multiplies loss by 5x for article tokens (262, 264, 389)
 - Returns separate `article_loss` and `other_loss` for monitoring
 - Tracks article vs other token counts
 
@@ -34,9 +34,9 @@ loss = outputs['loss']  # Standard loss
 outputs = self.model(input_ids=input_ids)  # Get logits only
 logits = outputs['logits']
 
-# Compute weighted loss (10x weight on articles)
+# Compute weighted loss (5x weight on articles - conservative to avoid overfitting)
 loss, article_loss, other_loss, article_count, other_count = self.compute_weighted_loss(
-    logits, labels, article_weight=10.0
+    logits, labels, article_weight=5.0
 )
 ```
 
