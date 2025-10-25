@@ -780,18 +780,6 @@ class Trainer:
                     if grad_health:
                         logger.info(f"{grad_health}")
 
-                # ARTICLE FIX: Article learning progress check
-                if article_ratio > 3.0:
-                    logger.info("❌ Article loss >> Other loss - Model struggling with articles")
-                elif article_ratio > 2.0:
-                    logger.info("⚠️  Article loss high - Still learning articles")
-                elif article_ratio > 1.5:
-                    logger.info("🟡 Article loss improving - Getting better")
-                elif article_ratio > 0.8 and article_ratio < 1.2:
-                    logger.info("✅ Article loss balanced - Model learned articles!")
-                elif article_ratio < 0.8:
-                    logger.info("⚠️  Article loss too low - May be overfitting to articles")
-
             # Validation (only when we actually step)
             if metrics.get('is_step', False) and self.global_step % self.config['training'].get('eval_steps', 500) == 0:
                 # Run validation with sample generation
