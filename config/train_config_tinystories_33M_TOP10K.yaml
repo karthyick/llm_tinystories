@@ -1,0 +1,69 @@
+# TinyStories 33M Model - TOP-10K VOCABULARY (PROVEN APPROACH)
+# Based on research: ALL successful implementations use 8K-10K vocab
+# Standard cross-entropy loss, no weighting needed!
+
+model:
+  vocab_size: 10000        # ✅ TOP-10K! (was 32000)
+  d_model: 448
+  n_layers: 7
+  n_heads: 7
+  d_ffn: 1344
+  max_seq_len: 512
+  dropout: 0.1             # ✅ Official uses 0.2, but 0.1 is fine
+  rope_percentage: 0.5
+  rope_base: 10000
+  rms_norm_eps: 1e-6
+  tie_embeddings: true
+  use_flash_attention: true
+
+training:
+  batch_size: 64           # ✅ Good for RTX 5090
+  num_epochs: 5            # ✅ Start with 5 (research shows 3-5 sufficient)
+  gradient_accumulation_steps: 4  # ✅ Effective batch: 64*4 = 256
+
+  use_bf16: true
+  use_gradient_checkpointing: false
+  use_compile: false       # ✅ Windows - Triton not supported
+
+  eval_steps: 200
+  save_steps: 1000
+  logging_steps: 10
+
+  show_progress: true
+  use_wandb: false
+  output_dir: "./checkpoints"
+
+optimizer:
+  learning_rate: 5e-4      # ✅ CRITICAL! Most important parameter
+  adam_beta1: 0.9          # ✅ Official
+  adam_beta2: 0.95         # ✅ Official
+  adam_epsilon: 1e-8
+  weight_decay: 0.1        # ✅ Official
+  max_grad_norm: 1.0
+
+scheduler:
+  type: cosine             # ✅ Research shows cosine > constant
+  warmup_steps: 100
+  lr_decay_iters: 35000    # ✅ Should match total training steps (~5 epochs)
+  min_lr: 5e-5            # ✅ learning_rate / 10
+
+data:
+  dataset: "tinystories"
+  tokenizer_path: "./tokenizer/tinystories_10k"  # ✅ NEW! Train custom tokenizer
+  cache_dir: "./data/cache"
+  max_seq_len: 512
+
+  check_quality: true
+  quality_sample_size: 10000
+  quality_strict: false
+
+hardware:
+  device: "cuda"
+  num_gpus: 1
+
+# TRAINING PHILOSOPHY (from research):
+# - Standard cross-entropy loss (NO weighting!)
+# - Top-10K vocabulary (NOT 32K!)
+# - Train until validation loss <2.0
+# - Grammar emerges naturally at loss ~3.0, perfect at <2.0
+# - Expected: 8-9/10 grammar score with ZERO special techniques

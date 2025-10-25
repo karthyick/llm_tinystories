@@ -1,0 +1,70 @@
+# TinyStories 33M - Using Karpathy's llama2.c Tokenizer (FASTEST APPROACH!)
+# Proven tokenizer from llama2.c with 4096 vocabulary
+# NO need to train custom tokenizer - just download and use!
+
+model:
+  vocab_size: 4096             # ✅ Karpathy's tokenizer size
+  d_model: 448
+  n_layers: 7
+  n_heads: 7
+  d_ffn: 1344
+  max_seq_len: 512
+  dropout: 0.1
+  rope_percentage: 0.5
+  rope_base: 10000
+  rms_norm_eps: 1e-6
+  tie_embeddings: true
+  use_flash_attention: true
+
+training:
+  batch_size: 64
+  num_epochs: 5                # 3-5 epochs sufficient (research-backed)
+  gradient_accumulation_steps: 4
+
+  use_bf16: true
+  use_gradient_checkpointing: false
+  use_compile: false
+
+  eval_steps: 200
+  save_steps: 1000
+  logging_steps: 10
+
+  show_progress: true
+  use_wandb: false
+  output_dir: "./checkpoints"
+
+optimizer:
+  learning_rate: 5e-4          # ✅ CRITICAL!
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  adam_epsilon: 1e-8
+  weight_decay: 0.1
+  max_grad_norm: 1.0
+
+scheduler:
+  type: cosine
+  warmup_steps: 100
+  lr_decay_iters: 35000        # ~5 epochs
+  min_lr: 5e-5                 # learning_rate / 10
+
+data:
+  dataset: "tinystories"
+  tokenizer_path: "./tokenizer/llama2c_tinystories/tokenizer.model"  # ✅ Karpathy's tokenizer!
+  cache_dir: "./data/cache"
+  max_seq_len: 512
+
+  check_quality: true
+  quality_sample_size: 10000
+  quality_strict: false
+
+hardware:
+  device: "cuda"
+  num_gpus: 1
+
+# ADVANTAGES OF THIS APPROACH:
+# ✅ Proven tokenizer (used in successful llama2.c models)
+# ✅ 4096 vocab (even better than 10K for TinyStories!)
+# ✅ No training needed (download and use immediately)
+# ✅ Optimized for TinyStories (trained by Karpathy specifically for it)
+# ✅ Standard cross-entropy loss (no weighting!)
+# ✅ Expected result: 8-9/10 grammar, articles present
