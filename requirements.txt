@@ -1,0 +1,19 @@
+# Core Dependencies
+torch>=2.0.0
+numpy>=1.24.0
+
+# Tokenization
+tokenizers>=0.13.0
+transformers>=4.30.0
+
+# Data Processing
+datasets>=2.12.0
+
+# Configuration
+pyyaml>=6.0.0
+
+# Training Utilities (Optional)
+tqdm>=4.65.0
+
+# Optional: Flash Attention for faster training
+# flash-attn>=2.0.0  # Install separately: pip install flash-attn --no-build-isolation
