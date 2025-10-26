@@ -126,8 +126,8 @@ from src.model.transformer_block import WikiMiniModel
 from src.data.tokenizer import load_tokenizer
 import torch
 
-# Load model
-checkpoint = torch.load('checkpoints/checkpoint_latest.pth', weights_only=False)
+# Load model (use best checkpoint for production)
+checkpoint = torch.load('checkpoints/checkpoint_best_ppl_8.65.pth', weights_only=False)
 model = WikiMiniModel(checkpoint['config']['model'])
 model.load_state_dict(checkpoint['model_state_dict'])
 model.eval()
