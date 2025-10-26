@@ -444,10 +444,6 @@ Expected limitations for a 24.5M parameter model:
 - **Llama 2:** [arXiv:2307.09288](https://arxiv.org/abs/2307.09288)
   - Touvron et al. (2023) - Meta AI
 
-### Related Work
-- **TinyStories Dataset:** https://huggingface.co/datasets/roneneldan/TinyStories
-- **Survey:** 30+ implementations reviewed (all use 4K-10K vocabulary)
-
 ### Citation
 ```bibtex
 @article{eldan2023tinystories,
