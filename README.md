@@ -6,14 +6,7 @@ A small language model (24.5M parameters) trained on the TinyStories dataset tha
 
 ---
 
-## 🎯 Problem & Solution
-
-### The Challenge
-Training a small language model that consistently generates articles ("a", "the", "an") - a common failure point for small models.
-
-### Root Cause
-- **Original Setup:** 32K vocabulary → articles get 0.009% training exposure
-- **Result:** Model rarely learns proper article usage
+## Solution
 
 ### Solution Implemented
 - **Custom 10K Tokenizer:** Trained specifically on TinyStories dataset
