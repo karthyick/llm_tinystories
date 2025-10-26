@@ -27,7 +27,7 @@ A small language model (24.5M parameters) trained on the TinyStories dataset tha
 | **Grammar Score** | 8+/10 | **8.8-10/10** (with post-processing) | ✅ Exceeded |
 | **Perplexity** | <20 | **15.7** | ✅ Excellent |
 | **Articles per Story** | ~10 | **9 average** | ✅ Optimal |
-| **Training Time** | <48h | **~3 hours** (RTX ***) | ✅ Met |
+| **Training Time** | <48h | **~6 hours** (RTX ***) | ✅ Met |
 
 **Overall Grade:** A (95/100) - Production Ready
 
@@ -49,7 +49,7 @@ python train_custom_tokenizer.py \
   --max_samples 100000
 ```
 
-### 2. Train Model (30-40 hours on RTX 5090)
+### 2. Train Model (6 hours on RTX 5090)
 ```bash
 # Clean old cache
 rm -rf ./data/cache/*
