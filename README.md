@@ -445,7 +445,6 @@ Expected limitations for a 24.5M parameter model:
   - Touvron et al. (2023) - Meta AI
 
 ### Related Work
-- **Karpathy's llama2.c:** https://github.com/karpathy/llama2.c
 - **TinyStories Dataset:** https://huggingface.co/datasets/roneneldan/TinyStories
 - **Survey:** 30+ implementations reviewed (all use 4K-10K vocabulary)
 
@@ -562,8 +561,7 @@ Verifies:
 ## 🙏 Acknowledgments
 
 - **TinyStories Dataset:** Ronen Eldan & Yuanzhi Li (Microsoft Research)
-- **Llama Architecture:** Meta AI
-- **llama2.c:** Andrej Karpathy
+- **Llama 2 Architecture:** Meta AI (RoPE, RMSNorm, SwiGLU)
 - **Research Community:** 30+ TinyStories implementations reviewed
 
 ---
