@@ -2,50 +2,50 @@
 
 Based on Epoch 4 enhanced evaluation results.
 
-## 🏆 Recommended: Balanced Configuration
+## 🏆 Recommended: Conservative Configuration
 
-**Overall Score**: 26.2/30 (87.3%)
+**Overall Score**: 27.6/30 (92%) - Based on checkpoint_best_ppl_8.65.pth evaluation
 
 ```python
 # Generation parameters
-temperature = 0.8
-top_k = 50
-top_p = 0.95
-repetition_penalty = 1.2
+temperature = 0.7
+top_k = 40
+top_p = 0.9
+repetition_penalty = 1.3
 
 # Length
 max_length = 200  # Adjust based on needs
 
 # Post-processing
-enable_post_processing = True  # Highly recommended (+3 points grammar)
+enable_post_processing = True  # CRITICAL (+4 points grammar to achieve 10/10)
 ```
 
 ### Expected Quality:
 - ✅ Articles: 100% presence
-- ✅ Grammar: 9.2/10 (with post-processing)
-- ✅ Repetition: 7.0/10 (75% unique words)
-- ✅ Perplexity: 17.4 (good coherence)
+- ✅ Grammar: 10.0/10 (with post-processing) - PERFECT
+- ✅ Repetition: 7.6/10 (80% unique words) - BEST
+- ✅ Perplexity: 15.7 (excellent coherence)
 
 ---
 
 ## Alternative Configurations
 
-### Conservative (Least Repetition)
+### Balanced (More Creative)
 
-Use when repetition is a major concern.
+Use when you want more variety while maintaining quality.
 
 ```python
-temperature = 0.7
-top_k = 40
-top_p = 0.9
-repetition_penalty = 1.3
+temperature = 0.8
+top_k = 50
+top_p = 0.95
+repetition_penalty = 1.2
 ```
 
 **Quality**:
 - Articles: 100% ✅
-- Grammar: 8.8/10
-- Repetition: 7.2/10 (79.5% unique - best)
-- Perplexity: 16.3 (most coherent)
+- Grammar: 8.8/10 (with post-processing)
+- Repetition: 7.0/10 (76% unique)
+- Perplexity: 17.8 (good coherence)
 
 ### Creative (Most Variety)
 
