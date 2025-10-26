@@ -60,7 +60,8 @@ def load_model_and_tokenizer(checkpoint_path: str, device: str = 'cuda'):
 
     try:
         # Load checkpoint
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        # Note: weights_only=False is safe for your own checkpoints
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
         # Extract components
         model_state = checkpoint.get('model_state_dict', checkpoint.get('model', None))
