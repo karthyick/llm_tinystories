@@ -59,25 +59,51 @@ EVAL_PROMPTS = [
 
 def setup_cuda_optimizations():
     """Setup CUDA optimizations for better performance."""
-    if torch.cuda.is_available():
-        # Enable TF32 for better performance on Ampere/Ada/Blackwell
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
+    # Detailed CUDA debugging
+    logger.info("=" * 50)
+    logger.info("CUDA Detection Debug Info:")
+    logger.info(f"  PyTorch version: {torch.__version__}")
+    logger.info(f"  CUDA built: {torch.version.cuda}")
+    logger.info(f"  CUDA available: {torch.cuda.is_available()}")
+    logger.info(f"  CUDA device count: {torch.cuda.device_count()}")
 
-        # Enable cuDNN autotuner
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.deterministic = False
+    # Check for common CUDA issues
+    if not torch.cuda.is_available():
+        logger.warning("CUDA NOT AVAILABLE - Training will run on CPU!")
+        logger.warning("Possible causes:")
+        logger.warning("  1. PyTorch installed without CUDA support (pip install torch --index-url https://download.pytorch.org/whl/cu121)")
+        logger.warning("  2. NVIDIA driver not installed or outdated")
+        logger.warning("  3. CUDA toolkit version mismatch")
 
-        # Set high precision for FP32 matmul
-        torch.set_float32_matmul_precision('high')
+        # Check if CUDA was built into PyTorch
+        if torch.version.cuda is None:
+            logger.error("PyTorch was built WITHOUT CUDA support!")
+            logger.error("Please reinstall PyTorch with CUDA: pip install torch --index-url https://download.pytorch.org/whl/cu121")
+        logger.info("=" * 50)
+        return
 
-        logger.info("CUDA optimizations enabled")
+    # CUDA is available - enable optimizations
+    logger.info("CUDA is available!")
 
-        # Log GPU information
-        gpu_name = torch.cuda.get_device_name(0)
-        gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        logger.info(f"GPU: {gpu_name}")
-        logger.info(f"Memory: {gpu_memory:.2f} GB")
+    # Enable TF32 for better performance on Ampere/Ada/Blackwell
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    # Enable cuDNN autotuner
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
+
+    # Set high precision for FP32 matmul
+    torch.set_float32_matmul_precision('high')
+
+    logger.info("CUDA optimizations enabled")
+
+    # Log GPU information
+    gpu_name = torch.cuda.get_device_name(0)
+    gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+    logger.info(f"GPU: {gpu_name}")
+    logger.info(f"Memory: {gpu_memory:.2f} GB")
+    logger.info("=" * 50)
 
 
 def setup_file_logging(log_dir: str = "./logs") -> Tuple[str, str]:
@@ -952,12 +978,16 @@ def main():
 
         # Create data loaders
         logger.info("Creating data loaders...")
+        dataset_name = config['data'].get('dataset', 'tinystories')
+        data_path = config['data'].get('data_path')  # For custom datasets
+
         train_loader, val_loader = create_dataloaders(
             tokenizer=tokenizer,
             batch_size=config['training']['batch_size'],
             max_seq_len=config['data']['max_seq_len'],
             cache_dir=config['data']['cache_dir'],
-            dataset_name=config['data'].get('dataset', 'tinystories'),  # TinyStories by default
+            dataset_name=dataset_name,
+            data_path=data_path,  # Pass custom data path
             num_workers=0,  # CRITICAL for Windows
             pin_memory=torch.cuda.is_available(),
             drop_last=True,

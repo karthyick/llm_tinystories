@@ -176,6 +176,158 @@ class TinyStoriesDataset(Dataset):
         }
 
 
+class CustomDataset(Dataset):
+    """Custom dataset that loads from local JSONL files.
+
+    Supports llm_creator pipeline and any other custom dataset source.
+    Expects JSONL files with 'text' field in each line.
+    """
+
+    def __init__(
+        self,
+        tokenizer,
+        data_path: str,
+        split: str = "train",
+        max_seq_len: int = 512,
+        cache_dir: Optional[str] = None,
+    ):
+        """Initialize custom dataset.
+
+        Args:
+            tokenizer: Tokenizer instance (must have encode method)
+            data_path: Path to directory containing train.jsonl and val.jsonl
+            split: Dataset split ("train" or "validation")
+            max_seq_len: Maximum sequence length
+            cache_dir: Directory for caching processed data
+        """
+        self.tokenizer = tokenizer
+        self.data_path = Path(data_path)
+        self.split = split
+        self.max_seq_len = max_seq_len
+        self.cache_dir = Path(cache_dir) if cache_dir else Path("./data/cache")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Determine file path
+        if split == "train":
+            self.file_path = self.data_path / "train.jsonl"
+        else:
+            self.file_path = self.data_path / "val.jsonl"
+
+        if not self.file_path.exists():
+            raise FileNotFoundError(f"Dataset file not found: {self.file_path}")
+
+        # Cache file path based on data path hash
+        import hashlib
+        path_hash = hashlib.md5(str(self.file_path).encode()).hexdigest()[:8]
+        cache_file = self.cache_dir / f"custom_{split}_{max_seq_len}_{path_hash}.pkl"
+
+        # Try to load from cache
+        if cache_file.exists():
+            logger.info(f"Loading cached dataset from {cache_file}")
+            with open(cache_file, "rb") as f:
+                cache_data = pickle.load(f)
+                self.input_ids = cache_data["input_ids"]
+                self.labels = cache_data["labels"]
+            logger.info(f"Loaded {len(self.input_ids)} sequences from cache")
+        else:
+            # Process dataset
+            logger.info(f"Processing custom dataset from {self.file_path}...")
+            self.input_ids, self.labels = self._process_dataset()
+
+            # Save to cache
+            logger.info(f"Saving processed dataset to {cache_file}")
+            cache_data = {
+                "input_ids": self.input_ids,
+                "labels": self.labels,
+            }
+            with open(cache_file, "wb") as f:
+                pickle.dump(cache_data, f)
+
+        logger.info(f"Custom dataset ready: {len(self.input_ids)} sequences")
+
+    def _process_dataset(self) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+        """Process custom JSONL dataset into packed sequences."""
+        import json
+
+        # Load all text from JSONL
+        logger.info(f"Loading data from {self.file_path}...")
+        all_token_ids = []
+
+        with open(self.file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        logger.info(f"Found {len(lines)} samples")
+
+        for line in tqdm(lines, desc="Tokenizing"):
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                data = json.loads(line)
+                text = data.get("text", "").strip()
+
+                if len(text) > 0:
+                    # Encode text
+                    if hasattr(self.tokenizer, 'encode'):
+                        token_ids = self.tokenizer.encode(text, add_special_tokens=False)
+                    else:
+                        # Fallback for tokenizers.Tokenizer
+                        token_ids = self.tokenizer.tokenizer.encode(text).ids
+
+                    all_token_ids.extend(token_ids)
+            except json.JSONDecodeError:
+                continue
+
+        logger.info(f"Total tokens: {len(all_token_ids):,}")
+
+        if len(all_token_ids) < 2:
+            raise ValueError(f"Dataset too small: only {len(all_token_ids)} tokens")
+
+        # Pack into sequences
+        logger.info("Packing sequences...")
+        input_ids_list = []
+        labels_list = []
+
+        for i in range(0, len(all_token_ids) - 1, self.max_seq_len):
+            seq = all_token_ids[i : i + self.max_seq_len]
+
+            if len(seq) < 2:
+                continue
+
+            # Create input_ids and labels
+            input_ids = torch.tensor(seq[:-1], dtype=torch.long)
+            labels = torch.tensor(seq[1:], dtype=torch.long)
+
+            # Pad if necessary
+            if len(input_ids) < self.max_seq_len:
+                pad_len = self.max_seq_len - len(input_ids)
+                input_ids = torch.cat([
+                    input_ids,
+                    torch.full((pad_len,), self.tokenizer.pad_token_id, dtype=torch.long)
+                ])
+                labels = torch.cat([
+                    labels,
+                    torch.full((pad_len,), -100, dtype=torch.long)
+                ])
+
+            input_ids_list.append(input_ids)
+            labels_list.append(labels)
+
+        logger.info(f"Created {len(input_ids_list)} packed sequences")
+
+        return input_ids_list, labels_list
+
+    def __len__(self) -> int:
+        return len(self.input_ids)
+
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        return {
+            "input_ids": self.input_ids[idx],
+            "labels": self.labels[idx],
+        }
+
+
 def collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
     """Collate function for DataLoader.
 
@@ -200,18 +352,20 @@ def create_dataloaders(
     max_seq_len: int,
     cache_dir: str,
     dataset_name: str = "tinystories",
+    data_path: Optional[str] = None,
     num_workers: int = 0,
     pin_memory: bool = True,
     drop_last: bool = True,
 ) -> Tuple[DataLoader, DataLoader]:
-    """Create train and validation DataLoaders for TinyStories.
+    """Create train and validation DataLoaders.
 
     Args:
         tokenizer: Tokenizer instance
         batch_size: Batch size per device
-        max_seq_len: Maximum sequence length (512 recommended for TinyStories)
+        max_seq_len: Maximum sequence length (512 recommended)
         cache_dir: Directory for caching processed data
-        dataset_name: Dataset to use (default: "tinystories")
+        dataset_name: Dataset to use ("tinystories" or "custom")
+        data_path: Path to custom data directory (required if dataset_name="custom")
         num_workers: Number of data loading workers (use 0 for Windows)
         pin_memory: Whether to pin memory for faster GPU transfer
         drop_last: Whether to drop last incomplete batch
@@ -219,23 +373,47 @@ def create_dataloaders(
     Returns:
         Tuple of (train_loader, val_loader)
     """
-    logger.info("Using TinyStories dataset")
+    if dataset_name == "custom":
+        if not data_path:
+            raise ValueError("data_path is required for custom dataset")
 
-    logger.info("Creating train dataset...")
-    train_dataset = TinyStoriesDataset(
-        tokenizer=tokenizer,
-        split="train",
-        max_seq_len=max_seq_len,
-        cache_dir=cache_dir,
-    )
+        logger.info(f"Using custom dataset from: {data_path}")
 
-    logger.info("Creating validation dataset...")
-    val_dataset = TinyStoriesDataset(
-        tokenizer=tokenizer,
-        split="validation",
-        max_seq_len=max_seq_len,
-        cache_dir=cache_dir,
-    )
+        logger.info("Creating train dataset...")
+        train_dataset = CustomDataset(
+            tokenizer=tokenizer,
+            data_path=data_path,
+            split="train",
+            max_seq_len=max_seq_len,
+            cache_dir=cache_dir,
+        )
+
+        logger.info("Creating validation dataset...")
+        val_dataset = CustomDataset(
+            tokenizer=tokenizer,
+            data_path=data_path,
+            split="validation",
+            max_seq_len=max_seq_len,
+            cache_dir=cache_dir,
+        )
+    else:
+        logger.info("Using TinyStories dataset")
+
+        logger.info("Creating train dataset...")
+        train_dataset = TinyStoriesDataset(
+            tokenizer=tokenizer,
+            split="train",
+            max_seq_len=max_seq_len,
+            cache_dir=cache_dir,
+        )
+
+        logger.info("Creating validation dataset...")
+        val_dataset = TinyStoriesDataset(
+            tokenizer=tokenizer,
+            split="validation",
+            max_seq_len=max_seq_len,
+            cache_dir=cache_dir,
+        )
 
     # Create DataLoaders
     train_loader = DataLoader(
