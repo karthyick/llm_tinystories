@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  tinystories-inference:
+    build: .
+    container_name: tinystories-inference
+    restart: unless-stopped
+    volumes:
+      - C:\docker\tinystories\models:/models:ro
+    environment:
+      - CHECKPOINT_PATH=/models/checkpoint_best_ppl_8.65.pth
+      - TOKENIZER_PATH=/models/tokenizer/tinystories_10k
+      - DEVICE=cuda
+      - HOST=0.0.0.0
+      - PORT=7779
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tinystories.rule=Host(`tinystories.aichargeworks.com`)"
+      - "traefik.http.routers.tinystories.entrypoints=web"
+      - "traefik.http.services.tinystories.loadbalancer.server.port=7779"
+    networks:
+      - traefik-net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  traefik-net:
+    external: true
