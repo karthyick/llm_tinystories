@@ -36,6 +36,7 @@ from src.model.transformer_block import WikiMiniModel
 from src.data.dataset import TinyStoriesDataset, create_dataloaders
 from src.data.tokenizer import load_tokenizer
 from src.data.quality_checker import check_dataset_quality
+from src.evaluation import evaluate as evaluate_fn, EvalLogger, EarlyStopping
 
 # Setup logging (console only - file handlers added in main())
 logging.basicConfig(
@@ -281,6 +282,12 @@ class Trainer:
 
         # GPU memory tracking
         self.peak_gpu_memory = 0.0
+
+        # Evaluation benchmark: CSV logger and early stopping
+        self.eval_logger = EvalLogger(output_path="./results/eval_results.csv")
+        patience = self.config["training"].get("early_stopping_patience", 3)
+        self.early_stopper = EarlyStopping(patience=patience)
+        self.should_stop_early = False
 
         # Load tokenizer for text generation
         self.tokenizer = None  # Will be set from outside
@@ -808,8 +815,55 @@ class Trainer:
 
             # Validation (only when we actually step)
             if metrics.get('is_step', False) and self.global_step % self.config['training'].get('eval_steps', 500) == 0:
-                # Run validation with sample generation
-                val_metrics = self.validate(generate_samples=True, epoch=self.current_epoch)
+                # Evaluate on limited validation samples for speed
+                eval_samples = self.config['training'].get('eval_samples', 1000)
+                max_samples = eval_samples if eval_samples > 0 else len(self.val_loader.dataset)
+                eval_results = evaluate_fn(
+                    model=self.model,
+                    val_loader=self.val_loader,
+                    device=self.device,
+                    max_samples=max_samples,
+                    use_amp=self.use_amp,
+                    amp_dtype=self.amp_dtype,
+                )
+
+                val_metrics = {
+                    'val_loss': eval_results['val_loss'],
+                    'val_perplexity': eval_results['val_perplexity'],
+                }
+
+                # Log to CSV benchmark file
+                self.eval_logger.log(
+                    step=self.global_step,
+                    train_loss=self.current_train_loss,
+                    val_loss=val_metrics['val_loss'],
+                    perplexity=val_metrics['val_perplexity'],
+                )
+
+                # Log to evaluation text file
+                status = ""
+                if val_metrics['val_loss'] < self.best_val_loss:
+                    status = "🌟 NEW BEST LOSS"
+                if val_metrics['val_perplexity'] < self.best_val_ppl:
+                    status += " 🌟 NEW BEST PPL" if status else "🌟 NEW BEST PPL"
+                eval_logger.info(
+                    f"Step {self.global_step:6d} | "
+                    f"Loss: {val_metrics['val_loss']:.4f} | PPL: {val_metrics['val_perplexity']:7.2f} | "
+                    f"{status if status else 'OK'} "
+                    f"[{eval_results['samples_evaluated']} samples]"
+                )
+
+                # Generate text samples
+                if self.tokenizer is not None:
+                    logger.info("\n" + "="*70)
+                    logger.info("Sample Generations:")
+                    logger.info("="*70)
+                    for i, prompt in enumerate(EVAL_PROMPTS[:3], 1):
+                        sample = self.generate_sample(prompt, max_length=40, temperature=0.8)
+                        logger.info(f"\nPrompt {i}: {prompt}")
+                        logger.info(f"Generated: {sample}")
+                        eval_logger.info(f"  Sample {i}: {prompt} → {sample}")
+                    logger.info("="*70 + "\n")
 
                 # Calculate train-val gap
                 train_val_gap = self.current_train_loss - val_metrics['val_loss']
@@ -839,6 +893,20 @@ class Trainer:
                 elif train_val_gap > 0.5:  # Val loss much lower than train loss
                     logger.info("📈 Model generalizing well! Val loss < Train loss")
 
+                # Check early stopping
+                if self.early_stopper.step(val_metrics['val_loss']):
+                    logger.info(
+                        f"\n{'='*70}\n"
+                        f"⛔ Early stopping triggered at step {self.global_step}\n"
+                        f"Val loss has not improved for {self.early_stopper.patience} "
+                        f"consecutive evals. Best: {self.early_stopper.best_val_loss:.4f}\n"
+                        f"{'='*70}"
+                    )
+                    self.should_stop_early = True
+                    self.save_checkpoint(epoch, val_metrics)
+                    self.model.train()
+                    break
+
                 # Save checkpoint
                 self.save_checkpoint(epoch, val_metrics)
 
@@ -856,12 +924,25 @@ class Trainer:
 
         for epoch in range(start_epoch, num_epochs):
             logger.info(f"\nEpoch {epoch+1}/{num_epochs}")
-            
+
             # Train for one epoch
             train_loss = self.train_epoch(epoch)
 
+            # Propagate early stopping from within the epoch
+            if self.should_stop_early:
+                logger.info(f"Training stopped early at end of epoch {epoch+1}.")
+                break
+
             # Validation at end of epoch with sample generation
             val_metrics = self.validate(generate_samples=True, epoch=epoch)
+
+            # Log end-of-epoch metrics to CSV benchmark file
+            self.eval_logger.log(
+                step=self.global_step,
+                train_loss=train_loss,
+                val_loss=val_metrics['val_loss'],
+                perplexity=val_metrics['val_perplexity'],
+            )
 
             # Calculate train-val gap
             train_val_gap = train_loss - val_metrics['val_loss']

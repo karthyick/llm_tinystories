@@ -41,6 +41,53 @@ A small language model (24.5M parameters) trained on the TinyStories dataset tha
 pip install torch transformers datasets tokenizers pyyaml
 ```
 
+### 🌐 Web UI (Recommended)
+
+The easiest way to interact with the model is through the web UI:
+
+```bash
+# 1. Install web UI dependencies
+pip install -r requirements.txt
+
+# 2. Start the server
+python run_ui.py
+
+# 3. Open in browser
+# Navigate to http://localhost:7779
+```
+
+**Web UI Features:**
+- Interactive story generation with real-time streaming
+- Adjustable parameters: temperature (0.1-2.0), max tokens (50-500)
+- Dark theme with clean, modern interface
+- Server-sent events (SSE) for token-by-token streaming
+
+**Environment Variables:**
+```bash
+# Customize server configuration
+export CHECKPOINT_PATH=checkpoints/checkpoint_best_ppl_8.65.pth
+export TOKENIZER_PATH=tokenizer/tinystories_10k
+export DEVICE=cuda
+export PORT=7779
+
+python run_ui.py
+```
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web UI interface |
+| `/generate` | POST | Generate text (streaming SSE) |
+| `/health` | GET | Server and model status |
+
+**Example API Usage:**
+```bash
+# Generate text via API
+curl -X POST http://localhost:7779/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Once upon a time", "temperature": 0.8, "max_tokens": 100}'
+```
+
 ### 1. Train Custom Tokenizer (30-60 minutes)
 ```bash
 python train_custom_tokenizer.py \
