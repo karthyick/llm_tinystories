@@ -149,22 +149,77 @@ async def lifespan(app: FastAPI):
     logger.info("Server shutting down...")
 
 
+# Generation timeout — prevents a single request holding a semaphore slot forever
+_GENERATION_TIMEOUT_SECONDS: int = 60
+
+# Allowed CORS origins — restrict to our own domains
+_ALLOWED_ORIGINS: list[str] = [
+    "https://aichargeworks.com",
+    "https://www.aichargeworks.com",
+    "https://tinystories.aichargeworks.com",
+]
+
+import re as _re
+
+# Prompt sanitisation — reject control chars except tab/newline
+_CONTROL_CHAR_PATTERN = _re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _sanitise_prompt(prompt: str) -> str:
+    """Strip dangerous control characters from prompt text."""
+    return _CONTROL_CHAR_PATTERN.sub("", prompt).strip()
+
+
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="TinyStories Web UI",
     description="Web interface for TinyStories story generation model with streaming SSE",
     version="1.0.0",
     lifespan=lifespan,
+    # Hide API docs on production to reduce attack surface
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
-# Add CORS middleware
+# Add CORS middleware — restrict to known origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as StarletteResponse
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Inject security response headers on every response."""
+
+    async def dispatch(self, request: Request, call_next: Any) -> StarletteResponse:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # CSP: allow fonts from Google + self only; no inline scripts (the template uses defer/inline — allow unsafe-inline for UI only)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src https://fonts.gstatic.com; "
+            "img-src 'self' https://aichargeworks.com data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # HTML template for the UI — matches KR Playground glassmorphic theme
@@ -826,6 +881,11 @@ async def generate(request: GenerateRequest, http_request: Request):
             detail="Model not loaded. Check server logs for loading errors."
         )
 
+    # Sanitise prompt — strip control characters
+    clean_prompt = _sanitise_prompt(request.prompt)
+    if not clean_prompt:
+        raise HTTPException(status_code=400, detail="Prompt is empty after sanitisation.")
+
     # Per-IP rate limit check
     client_ip = _get_client_ip(http_request)
     if not _check_rate_limit(client_ip):
@@ -834,7 +894,7 @@ async def generate(request: GenerateRequest, http_request: Request):
             detail=f"Rate limit exceeded: max {_RATE_LIMIT_REQUESTS} requests per {_RATE_LIMIT_WINDOW}s. Please wait.",
         )
 
-    # Concurrent generation limit — try to acquire without blocking
+    # Concurrent generation limit — fail fast without blocking
     if not _generation_semaphore._value:  # noqa: SLF001
         raise HTTPException(
             status_code=429,
@@ -843,16 +903,21 @@ async def generate(request: GenerateRequest, http_request: Request):
 
     async def _stream_with_semaphore() -> AsyncGenerator[str, None]:
         async with _generation_semaphore:
-            async for chunk in generate_sse_stream(
-                generator=get_generator(),
-                prompt=request.prompt,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-                top_k=request.top_k,
-                top_p=request.top_p,
-                repetition_penalty=request.repetition_penalty,
-            ):
-                yield chunk
+            try:
+                async with asyncio.timeout(_GENERATION_TIMEOUT_SECONDS):
+                    async for chunk in generate_sse_stream(
+                        generator=get_generator(),
+                        prompt=clean_prompt,
+                        max_tokens=request.max_tokens,
+                        temperature=request.temperature,
+                        top_k=request.top_k,
+                        top_p=request.top_p,
+                        repetition_penalty=request.repetition_penalty,
+                    ):
+                        yield chunk
+            except TimeoutError:
+                logger.warning("Generation timed out for IP %s", client_ip)
+                yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         _stream_with_semaphore(),
