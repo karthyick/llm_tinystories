@@ -747,7 +747,7 @@ HTML_TEMPLATE = """
                 const d = await r.json();
                 if (d.model_loaded) {
                     dot.style.cssText = 'background:#10b981;animation:pulse 2s ease-in-out infinite';
-                    txt.textContent = 'Model loaded \u00b7 ' + (d.parameters || '') + ' \u00b7 ' + (d.device || '');
+                    txt.textContent = 'Model loaded';
                     setStatus('ready', 'Ready');
                 } else {
                     dot.style.background = '#f59e0b';
