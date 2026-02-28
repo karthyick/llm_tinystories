@@ -15,5 +15,10 @@ pyyaml>=6.0.0
 # Training Utilities (Optional)
 tqdm>=4.65.0
 
+# Web UI Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
 # Optional: Flash Attention for faster training
 # flash-attn>=2.0.0  # Install separately: pip install flash-attn --no-build-isolation
