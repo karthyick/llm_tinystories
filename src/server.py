@@ -75,7 +75,7 @@ class GenerateRequest(BaseModel):
     """Request model for text generation."""
     prompt: str = Field(..., min_length=1, max_length=2048, description="Input prompt text")
     max_tokens: int = Field(default=100, ge=10, le=1000, description="Maximum tokens to generate")
-    temperature: float = Field(default=0.8, ge=0.1, le=2.0, description="Sampling temperature")
+    temperature: float = Field(default=2.0, ge=0.1, le=2.0, description="Sampling temperature")
     top_k: int = Field(default=50, ge=0, le=100, description="Top-k sampling")
     top_p: float = Field(default=0.9, ge=0.1, le=1.0, description="Nucleus sampling threshold")
     repetition_penalty: float = Field(default=1.1, ge=1.0, le=2.0, description="Repetition penalty")
@@ -579,13 +579,6 @@ HTML_TEMPLATE = """
             <div class="controls">
                 <div class="slider-group">
                     <div class="slider-label">
-                        Temperature
-                        <span class="val" id="temp-val">0.80</span>
-                    </div>
-                    <input type="range" id="temperature" min="0.1" max="2.0" step="0.05" value="0.8">
-                </div>
-                <div class="slider-group">
-                    <div class="slider-label">
                         Max Tokens
                         <span class="val" id="tokens-val">200</span>
                     </div>
@@ -632,9 +625,6 @@ HTML_TEMPLATE = """
 
     <script>
         // Slider live updates
-        document.getElementById('temperature').addEventListener('input', e => {
-            document.getElementById('temp-val').textContent = parseFloat(e.target.value).toFixed(2);
-        });
         document.getElementById('max-tokens').addEventListener('input', e => {
             document.getElementById('tokens-val').textContent = e.target.value;
         });
@@ -654,7 +644,6 @@ HTML_TEMPLATE = """
 
             if (running) { controller.abort(); return; }
 
-            const temperature = parseFloat(document.getElementById('temperature').value);
             const max_tokens = parseInt(document.getElementById('max-tokens').value);
 
             running = true;
@@ -675,7 +664,7 @@ HTML_TEMPLATE = """
                 const resp = await fetch('/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, max_tokens, temperature, top_k: 50, top_p: 0.9, repetition_penalty: 1.1 }),
+                    body: JSON.stringify({ prompt, max_tokens, temperature: 2.0, top_k: 50, top_p: 0.9, repetition_penalty: 1.1 }),
                     signal: controller.signal,
                 });
 
