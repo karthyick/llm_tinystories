@@ -201,12 +201,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Any) -> StarletteResponse:
         response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        # CSP: allow fonts from Google + self only; no inline scripts (the template uses defer/inline — allow unsafe-inline for UI only)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
@@ -820,7 +820,7 @@ async def generate_sse_stream(
             if isinstance(token, str) and token.startswith("__ERROR__:"):
                 error_msg = token[10:]
                 logger.error(f"Error during generation: {error_msg}")
-                yield f"data: {json.dumps({'error': error_msg})}\n\n"
+                yield f"data: {json.dumps({'error': 'Generation error occurred'})}\n\n"
                 return
 
             # Format as SSE event with JSON payload
@@ -831,7 +831,7 @@ async def generate_sse_stream(
 
     except Exception as e:
         logger.error(f"Error during streaming: {e}")
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        yield f"data: {json.dumps({'error': 'Streaming error occurred'})}\n\n"
 
 
 # Routes
