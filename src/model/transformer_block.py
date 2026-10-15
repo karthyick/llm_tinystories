@@ -357,13 +357,10 @@ class WikiMiniModel(nn.Module):
 
         # Calculate loss if labels provided
         if labels is not None:
-            # Shift for next-token prediction
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-
-            # Flatten for cross-entropy
-            shift_logits = shift_logits.view(-1, self.vocab_size)
-            shift_labels = shift_labels.view(-1)
+            # Datasets pre-shift: labels[t] is already the token that follows
+            # input_ids[t], so logits and labels align position for position.
+            shift_logits = logits.contiguous().view(-1, self.vocab_size)
+            shift_labels = labels.contiguous().view(-1)
 
             # Calculate cross-entropy loss
             loss = nn.functional.cross_entropy(
