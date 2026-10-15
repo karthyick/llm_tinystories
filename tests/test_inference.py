@@ -245,6 +245,37 @@ class TestStreamingGeneratorWithModel:
         assert isinstance(result, str)
 
 
+class TestNextTokenPosition:
+    """The generator reads logits[-1] or logits[-2] depending on what the checkpoint predicts."""
+
+    @staticmethod
+    def _generator(ahead: int) -> StreamingGenerator:
+        vocab = 64
+
+        def model(input_ids):
+            ids = input_ids[0].tolist()
+            logits = torch.zeros(1, len(ids), vocab)
+            for i in range(len(ids)):
+                # A model that knows the probe text predicts the token `ahead` steps on.
+                target = probe[i + ahead] if i + ahead < len(probe) else 0
+                logits[0, i, target] = 10.0
+            return {'logits': logits}
+
+        words = StreamingGenerator._PROBE.split()
+        probe = [5 + (i % 50) for i in range(len(words))]
+        loader = ModelLoader()
+        loader._model = model
+        loader._tokenizer = Mock(encode=lambda text: probe, bos_token_id=None, eos_token_id=0)
+        loader._device = torch.device("cpu")
+        return StreamingGenerator(loader)
+
+    def test_next_token_checkpoint_reads_last_position(self):
+        assert self._generator(ahead=1)._next_token_pos() == -1
+
+    def test_two_ahead_checkpoint_reads_second_last_position(self):
+        assert self._generator(ahead=2)._next_token_pos() == -2
+
+
 class TestGlobalFunctions:
     """Tests for global convenience functions."""
 

@@ -176,6 +176,25 @@ class StreamingGenerator:
             model_loader: ModelLoader instance with loaded model
         """
         self.model_loader = model_loader
+        self._next_pos: Optional[int] = None
+
+    # Checkpoints trained before the loss fix (PR #2) predict two tokens ahead:
+    # dataset.py already shifts labels (labels = seq[1:]) and the old loss shifted
+    # again. checkpoint_best_ppl_8.65 measured: argmax hits t+2 10/12, t+1 0/13.
+    # Probe once per checkpoint and read logits[-1] (next token) or logits[-2].
+    _PROBE = "Once upon a time, there was a little girl named Lily. She loved to play outside in the park."
+
+    @torch.no_grad()
+    def _next_token_pos(self) -> int:
+        if self._next_pos is None:
+            model, tokenizer = self.model_loader.model, self.model_loader.tokenizer
+            ids = tokenizer.encode(self._PROBE)
+            pred = model(torch.tensor([ids], dtype=torch.long, device=self.model_loader.device))['logits'][0].argmax(-1).tolist()
+            hits_next = sum(pred[i] == ids[i + 1] for i in range(min(len(pred), len(ids) - 1)))
+            hits_skip = sum(pred[i] == ids[i + 2] for i in range(min(len(pred), len(ids) - 2)))
+            self._next_pos = -2 if hits_skip > hits_next else -1
+            logger.info(f"Next-token logits at position {self._next_pos} (probe hits t+1={hits_next}, t+2={hits_skip})")
+        return self._next_pos
 
     @torch.no_grad()
     def generate_stream(
@@ -214,13 +233,11 @@ class StreamingGenerator:
             device=device
         )
 
-        # The checkpoint predicts two tokens ahead: dataset.py already shifts labels
-        # (labels = seq[1:]) and the model's loss shifts them again. So the logits at
-        # position -2 are the real next-token prediction (measured: argmax hits t+2
-        # 10/12, t+1 0/13). That needs at least two input tokens, so a one-token
-        # prompt gets a start token in front (this tokenizer has no BOS, so EOS, the
-        # story separator, stands in).
-        if input_ids.shape[1] < 2:
+        # A two-ahead checkpoint reads logits[-2], which needs two input tokens, so a
+        # one-token prompt gets a start token in front (this tokenizer has no BOS, so
+        # EOS, the story separator, stands in).
+        next_pos = self._next_token_pos()
+        if next_pos == -2 and input_ids.shape[1] < 2:
             start_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
             start = torch.tensor([[start_id]], dtype=torch.long, device=device)
             input_ids = torch.cat([start, input_ids], dim=-1)
@@ -241,7 +258,7 @@ class StreamingGenerator:
             ):
                 outputs = model(input_ids)
 
-            logits = outputs['logits'][0, -2, :]  # next-token logits (see note above)
+            logits = outputs['logits'][0, next_pos, :]  # next-token logits (see _next_token_pos)
 
             # Apply repetition penalty
             if repetition_penalty != 1.0:
