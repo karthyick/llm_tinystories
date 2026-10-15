@@ -214,6 +214,17 @@ class StreamingGenerator:
             device=device
         )
 
+        # The checkpoint predicts two tokens ahead: dataset.py already shifts labels
+        # (labels = seq[1:]) and the model's loss shifts them again. So the logits at
+        # position -2 are the real next-token prediction (measured: argmax hits t+2
+        # 10/12, t+1 0/13). That needs at least two input tokens, so a one-token
+        # prompt gets a start token in front (this tokenizer has no BOS, so EOS, the
+        # story separator, stands in).
+        if input_ids.shape[1] < 2:
+            start_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
+            start = torch.tensor([[start_id]], dtype=torch.long, device=device)
+            input_ids = torch.cat([start, input_ids], dim=-1)
+
         # Track generated tokens for repetition penalty
         generated_ids = input_ids[0].tolist()
 
@@ -230,7 +241,7 @@ class StreamingGenerator:
             ):
                 outputs = model(input_ids)
 
-            logits = outputs['logits'][0, -1, :]  # Get last token logits
+            logits = outputs['logits'][0, -2, :]  # next-token logits (see note above)
 
             # Apply repetition penalty
             if repetition_penalty != 1.0:
