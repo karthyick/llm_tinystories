@@ -64,6 +64,7 @@ NVIDIA / source corrections, checked in code:
 - Added five regression tests; hybrid test file now contains 12 tests. Recomputed parameter counts: dense 24,557,120; hybrid 26,095,380.
 - Checked by orchestrator probes (11/12, followed by a scan re-check) and an independent code reviewer; this round reran the required hybrid suite, full suite, and CPU hybrid forward/backward.
 - At B=2,T=256, the transition is `[B,T,T,H]`; the earlier expanded `[B,T,T,H,P,N]` allocation is eliminated.
+- Orchestrator re-check after the fix (Mac CPU): sequential == segsum at T=512 (max diff 2.8e-5); full hybrid yaml forward+backward at B=4,T=512 fp32 = +2.07 GB peak RSS, 5.9 s, so B=64 is ~33 GB fp32 (over the 28 GB S1 budget; bf16 roughly halves activations). If S1 measures > 28 GB in bf16: batch 32 x gradient_accumulation 2 before writing a chunked scan. Init main CE at full size 8.78 vs ln(10000)=9.21; expert/shared `w_down` std 0.0071 (scaled); `expert_bias` not in `parameters()`; causality leak 0.0 at 4 cut points; every trainable param gets a finite grad.
 
 ## 4. What "good" looks like (decide up front so the result can't be spun)
 
