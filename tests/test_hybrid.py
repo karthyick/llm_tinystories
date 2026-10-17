@@ -1,11 +1,12 @@
 import torch
 
 from src.model.hybrid import HybridLM, Mamba2Mixer, MoESwiGLU
+from src.model.hybrid.mamba2 import segsum_scan, sequential_scan
 
 
 def _config():
     return dict(vocab_size=31, d_model=16, n_layers=2, n_heads=2, mamba_heads=2,
-                d_ffn=24, n_experts=2, top_k=1, layer_pattern="MA",
+                d_ffn=24, expert_ffn=24, dense_ffn=72, n_experts=2, top_k=1, layer_pattern="MF",
                 max_seq_len=12, dropout=0.0, use_flash_attention=False)
 
 
@@ -17,6 +18,40 @@ def test_mamba_shape_and_causality():
     changed[:, 5:] += 10
     assert mixer(x).shape == x.shape
     assert torch.allclose(mixer(x)[:, :5], mixer(changed)[:, :5], atol=1e-6)
+
+
+def test_sequential_scan_equals_segsum_scan():
+    torch.manual_seed(7)
+    batch, length, heads, head_dim, state_size = 2, 7, 2, 3, 4
+    x = torch.randn(batch, length, heads, head_dim)
+    b, c = torch.randn(batch, length, heads, state_size), torch.randn(batch, length, heads, state_size)
+    dt = torch.rand(batch, length, heads) * 0.1
+    a_vec = -torch.rand(heads) * 4 - 1
+    a, d = a_vec.view(1, heads, 1, 1), torch.ones(1, heads, 1)
+    expected = sequential_scan(x, b, c, dt, a, d)
+    actual = segsum_scan(x, b, c, dt, a_vec.view(1, 1, heads), d.view(1, 1, heads, 1))
+    assert torch.allclose(actual, expected, atol=1e-4, rtol=1e-4)
+
+
+def test_initial_main_ce_near_uniform():
+    torch.manual_seed(21)
+    model = HybridLM(_config())
+    ids = torch.randint(0, model.vocab_size, (4, 16))
+    labels = torch.randint(0, model.vocab_size, ids.shape)
+    ce = model(ids, labels)["main_loss"]
+    assert abs(float(ce.detach()) - torch.log(torch.tensor(float(model.vocab_size))).item()) < 0.5
+
+
+def test_initial_main_ce_near_uniform_at_4000_vocab():
+    torch.manual_seed(17)
+    cfg = _config()
+    cfg.update(vocab_size=4000, d_model=32, n_heads=4, mamba_heads=4, d_ffn=48,
+               expert_ffn=16, dense_ffn=48, state_size=4, layer_pattern="MF")
+    model = HybridLM(cfg)
+    ids = torch.randint(0, 4000, (2, 32))
+    labels = torch.randint(0, 4000, ids.shape)
+    ce = model(ids, labels)["main_loss"]
+    assert abs(float(ce.detach()) - torch.log(torch.tensor(4000.0)).item()) < 0.5
 
 
 def test_moe_top_k_shared_expert_and_aux_loss():
@@ -52,7 +87,7 @@ def test_full_model_shape_causality_and_mtp_backward():
     assert torch.allclose(out["main_loss"], expected_main)
     out["loss"].backward()
     assert model.token_embedding.weight.grad is not None
-    assert model.mtp_block[0].weight.grad is not None
+    assert model.mtp_projection.weight.grad is not None
 
 
 def test_tiny_batch_overfit_decreases_loss():

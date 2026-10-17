@@ -1,28 +1,42 @@
 # HybridLM design
 
 ```text
-token IDs ──> tied embedding ──> [Mamba-2 | attention] × layer_pattern
-                                      │ each layer:
-                                      ├─ pre-norm mixer + residual
-                                      └─ pre-norm top-k MoE + shared expert + residual
-                         ┌────────────┴────────────┐
-                         v                         v
-                  final norm + LM head     MTP(t+2) light block
-                         └────────────┬────────────┘
-                         main CE + weighted MTP CE + weighted MoE aux
+token IDs -> tied embedding
+                 |
+        +--------v---------+
+        | M: Mamba-2 mixer |  norm -> mixer -> residual
+        +--------+---------+
+                 v
+        +------------------+
+        | F: MoE / SwiGLU  |  norm -> shared + selected experts -> residual
+        +--------+---------+
+                 v
+        +------------------+
+        | M: Mamba-2 mixer |  norm -> mixer -> residual
+        +--------+---------+
+                 v
+        +------------------+       +-------------------------------+
+        | A: attention     |       | MTP: norm(h[t]) || norm(e[t+1])|
+        +--------+---------+       | -> projection -> one block     |
+                 |                 | -> shared LM head -> t+2 CE    |
+                 v                 +---------------+---------------+
+        final RMSNorm + shared LM head               |
+                 +--------------------+--------------+
+                                      v
+                         main CE + 0.3 * MTP CE + 1e-4 * balance loss
 ```
 
-| HybridLM piece | NVIDIA Nemotron idea borrowed | Local implementation |
+Pattern strings contain independent residual layers: `M` mixer, `A` attention, `F` feed-forward. Example `MFMFMFAF` begins with Mamba, interleaves FFNs, uses sparse attention, and ends with FFN.
+
+| Piece | NVIDIA / DeepSeek source | What we did at tiny scale |
 |---|---|---|
-| `M` layers | Mostly Mamba-2 / SSD mixers | Input-dependent delta, scalar per-head decay, B/C state projections, causal depthwise convolution, gated output |
-| `A` layers | Sparse attention in a hybrid stack | Existing `MultiHeadAttention` and RoPE |
-| MoE FFN | Top-k routed experts plus shared expert | SwiGLU expert pool; one shared expert always runs; balancing auxiliary loss |
-| MTP head | Multi-token prediction | One light head uses current and next input states to predict the t+2 label |
-| Shared embedding/head | Parameter-efficient language model | Tied token embedding and vocabulary projection |
+| M/A/F ordering | Nemotron-H, arXiv:2504.03624; Nemotron 3, arXiv:2512.20856 | Separate residual mixer and FFN layers; Mamba-first pattern with occasional attention and final FFN. |
+| Mamba-2 | `state-spaces/mamba` `mamba2_simple.py`; Nemotron-H, arXiv:2504.03624 | Single projection to z/x/B/C/dt; causal depthwise width-4 convolution over x/B/C; one group; selective decay, D skip, gated RMSNorm. Sequential reference plus quadratic segsum scan for training. |
+| MoE | DeepSeek-V3, arXiv:2412.19437; Nemotron 3, arXiv:2512.20856 | Sigmoid scores, top-2 among 8 SwiGLU experts, one shared SwiGLU expert; non-gradient bias adjusts by +/-1e-3 from batch load; balance loss weight 1e-4. |
+| MTP | DeepSeek-V3, arXiv:2412.19437 | Concatenated normalized hidden and next-token embedding, projection, one Mamba block, shared embedding/LM head; predicts t+2 with 0.3 weight. |
 
 ## Limits
 
-- The SSD recurrence is a simple sequential PyTorch scan. It is strictly causal but slow and intended for short sequences and correctness experiments.
-- This is an educational scale model, not a Nemotron checkpoint or faithful reproduction of NVIDIA's kernels, training recipe, or distributed expert routing.
-- GPU deployment should replace the scan with optimized Mamba-2/SSD kernels and remeasure numerical behavior and throughput on KR-ULTRA's 5090.
-- The MTP objective is auxiliary and its validation is excluded from dense-versus-hybrid comparison; only main next-token CE is reported.
+- The quadratic segmented-sum implementation is intended for short sequences; it trades memory for parallel training and is checked against the sequential recurrence.
+- No distributed expert routing or optimized CUDA kernels are included. Parameter counts and throughput describe this single-device experiment only.
+- MTP and auxiliary losses do not enter held-out main next-token CE.

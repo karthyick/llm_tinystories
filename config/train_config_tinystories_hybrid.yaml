@@ -4,15 +4,15 @@ model:
   d_model: 448
   n_layers: 8
   n_heads: 7
-  layer_pattern: "MMMAMMMA" # NVIDIA-style hybrid: mostly Mamba-2, sparse attention
+  layer_pattern: "MFMFMFAF" # separate Mamba / FFN / sparse-attention residual layers
   mamba_heads: 7
   state_size: 16
   conv_kernel: 4
   d_ffn: 320
-  n_experts: 4               # NVIDIA-style routed expert pool
+  n_experts: 8               # routed experts plus one always-on shared expert
   top_k: 2                   # NVIDIA-style sparse top-k routing
-  mtp_weight: 0.1            # NVIDIA-style multi-token prediction auxiliary head
-  aux_weight: 0.01
+  mtp_weight: 0.3            # may decay to 0.1 during training
+  aux_weight: 0.0001
   max_seq_len: 512
   dropout: 0.1
   tie_embeddings: true
