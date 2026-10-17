@@ -55,3 +55,5 @@ wandb/
 # OS
 .DS_Store
 Thumbs.db
+.venv/
+data/cache/

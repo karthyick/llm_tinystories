@@ -1,0 +1,27 @@
+# NVIDIA Nemotron-H ideas: mostly SSD mixers, sparse shared/routed MoE, MTP.
+model:
+  vocab_size: 10000
+  d_model: 448
+  n_layers: 8
+  n_heads: 7
+  layer_pattern: "MMMAMMMA" # NVIDIA-style hybrid: mostly Mamba-2, sparse attention
+  mamba_heads: 7
+  state_size: 16
+  conv_kernel: 4
+  d_ffn: 320
+  n_experts: 4               # NVIDIA-style routed expert pool
+  top_k: 2                   # NVIDIA-style sparse top-k routing
+  mtp_weight: 0.1            # NVIDIA-style multi-token prediction auxiliary head
+  aux_weight: 0.01
+  max_seq_len: 512
+  dropout: 0.1
+  tie_embeddings: true
+training:
+  batch_size: 64
+  learning_rate: 0.0005
+  use_bf16: true
+  max_steps: 35000
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 1000
+  device: cuda
