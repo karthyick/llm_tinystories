@@ -15,7 +15,7 @@ class MoESwiGLU(nn.Module):
         self.n_experts, self.top_k = n_experts, top_k
         self.balance_bias_step = balance_bias_step
         self.router = nn.Linear(d_model, n_experts, bias=False)
-        self.expert_bias = nn.Parameter(torch.zeros(n_experts), requires_grad=False)
+        self.register_buffer("expert_bias", torch.zeros(n_experts))
         self.experts = nn.ModuleList([SwiGLU(d_model, d_ffn, multiple_of=1) for _ in range(n_experts)])
         self.shared_expert = SwiGLU(d_model, d_ffn, multiple_of=1)
 
@@ -32,7 +32,7 @@ class MoESwiGLU(nn.Module):
             token_idx, slot = (indices == expert_id).nonzero(as_tuple=True)
             if token_idx.numel():
                 routed.index_add_(0, token_idx, expert(flat.index_select(0, token_idx)) * weights[token_idx, slot, None])
-        if self.training:
+        if self.training and torch.is_grad_enabled():
             with torch.no_grad():
                 mean_count = counts.float().mean()
                 self.expert_bias.add_(self.balance_bias_step * torch.sign(mean_count - counts.float()))

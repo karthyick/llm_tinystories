@@ -57,10 +57,15 @@ class HybridLM(nn.Module):
         residual_scale = len(self.layers) ** -0.5
         for layer in self.layers:
             block = layer["block"]
-            residual_projection = getattr(block, "out_proj", None) or getattr(block, "o_proj", None) or getattr(block, "w_down", None)
-            if residual_projection is not None:
-                with torch.no_grad():
-                    residual_projection.weight.mul_(residual_scale)
+            projections = [getattr(block, "out_proj", None), getattr(block, "o_proj", None),
+                           getattr(block, "w_down", None)]
+            if isinstance(block, MoESwiGLU):
+                projections.extend(expert.w_down for expert in block.experts)
+                projections.append(block.shared_expert.w_down)
+            with torch.no_grad():
+                for projection in projections:
+                    if projection is not None:
+                        projection.weight.mul_(residual_scale)
         self.lm_head.weight = self.token_embedding.weight
 
     @staticmethod
@@ -77,29 +82,34 @@ class HybridLM(nn.Module):
         aux_losses = []
         for layer in self.layers:
             block = layer["block"]
-            output = block(layer["norm"](x))
-            if isinstance(output, tuple):
-                output, aux = output
-                if aux is not None:
-                    aux_losses.append(aux)
+            normalized = layer["norm"](x)
+            if isinstance(block, MultiHeadAttention):
+                output, _kv_cache = block(normalized)
+            elif isinstance(block, MoESwiGLU):
+                output, aux = block(normalized)
+                aux_losses.append(aux)
+            else:
+                output = block(normalized)
             x = x + output
         hidden = self.final_norm(x)
         logits = self.lm_head(hidden)
         aux_loss = torch.stack(aux_losses).mean() if aux_losses else logits.new_zeros(())
         mtp_loss = logits.new_zeros(())
+        mtp_logits = None
         loss = None
         main_loss = logits.new_zeros(())
+        if input_ids.shape[1] > 2:
+            mtp_input = torch.cat([
+                self.mtp_hidden_norm(hidden[:, :-2]),
+                self.mtp_embed_norm(self.token_embedding(input_ids[:, 1:-1]))
+            ], dim=-1)
+            mtp_hidden = self.mtp_projection(mtp_input)
+            mtp_hidden = mtp_hidden + self.mtp_block[0](mtp_hidden)
+            mtp_logits = self.lm_head(self.final_norm(mtp_hidden))
         if labels is not None:
             main_loss = F.cross_entropy(logits.reshape(-1, self.vocab_size), labels.reshape(-1), ignore_index=-100)
-            if input_ids.shape[1] > 2:
-                mtp_input = torch.cat([
-                    self.mtp_hidden_norm(hidden[:, :-2]),
-                    self.mtp_embed_norm(self.token_embedding(input_ids[:, 1:-1]))
-                ], dim=-1)
-                mtp_hidden = self.mtp_projection(mtp_input)
-                mtp_hidden = mtp_hidden + self.mtp_block[0](mtp_hidden)
-                mtp_logits = self.lm_head(self.final_norm(mtp_hidden))
+            if mtp_logits is not None:
                 mtp_loss = F.cross_entropy(mtp_logits.reshape(-1, self.vocab_size), labels[:, 1:-1].reshape(-1), ignore_index=-100)
             loss = main_loss + self.mtp_weight * mtp_loss + self.aux_weight * aux_loss
         return {"logits": logits, "loss": loss, "main_loss": main_loss,
-                "mtp_loss": mtp_loss, "aux_loss": aux_loss}
+                "mtp_loss": mtp_loss, "mtp_logits": mtp_logits, "aux_loss": aux_loss}

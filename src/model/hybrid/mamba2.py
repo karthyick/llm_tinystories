@@ -20,6 +20,12 @@ def sequential_scan(x, b, c, dt, a, d):
     return torch.stack(outputs, dim=1)
 
 
+def _segsum_transition(b, c, dt, decay):
+    """Build the contracted [B,T,T,H] transition, never a P*N expansion."""
+    scores = torch.einsum("bthn,bshn->btsh", c, b)
+    return decay * scores * dt[:, None, :, :]
+
+
 def segsum_scan(x, b, c, dt, a, d):
     """Vectorized segmented-sum form of the same recurrence (O(L^2))."""
     # Inclusive cumulative log-decay; pair (s,t) carries decay s+1..t.
@@ -32,11 +38,9 @@ def segsum_scan(x, b, c, dt, a, d):
     valid = t[None, :] <= t[:, None]
     exponent = exponent.masked_fill(~valid[None, :, :, None], float("-inf"))
     decay = torch.exp(exponent)
-    # Keep input channels distinct while summing source positions.
-    state_terms = (decay[:, :, :, :, None, None] *
-                   (dt[:, None, :, :, None, None] * b[:, None, :, :, None, :] *
-                    x[:, None, :, :, :, None])).sum(dim=2)
-    y = (state_terms * c[:, :, :, None, :]).sum(dim=-1) + d * x
+    # Contract state channels before broadcasting over target/source pairs.
+    transition = _segsum_transition(b, c, dt, decay)
+    y = torch.einsum("btsh,bshp->bthp", transition, x) + d * x
     return y
 
 
@@ -62,7 +66,9 @@ class Mamba2Mixer(nn.Module):
         self.d_skip = nn.Parameter(torch.ones(n_heads))
         self.norm = RMSNorm(inner, eps=rms_norm_eps)
         self.out_proj = nn.Linear(inner, d_model, bias=False)
-        nn.init.uniform_(self.a_log, math.log(1.0), math.log(16.0))
+        a = torch.empty(n_heads).uniform_(1.0, 16.0)
+        with torch.no_grad():
+            self.a_log.copy_(a.log())
         # Initialize softplus(dt_bias) log-uniformly between 1e-3 and 0.1.
         dt0 = torch.exp(torch.empty(n_heads).uniform_(math.log(1e-3), math.log(0.1)))
         with torch.no_grad():
@@ -89,4 +95,4 @@ class Mamba2Mixer(nn.Module):
         c = c.unsqueeze(2).expand(-1, -1, self.n_heads, -1)
         dt = F.softplus(raw_dt + self.dt_bias)
         y = self.scan(x, b, c, dt).reshape(batch, length, i)
-        return self.out_proj(self.norm(y) * F.silu(z))
+        return self.out_proj(self.norm(y * F.silu(z)))
