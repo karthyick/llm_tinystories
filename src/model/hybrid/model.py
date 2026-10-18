@@ -108,7 +108,7 @@ class HybridLM(nn.Module):
             mtp_logits = self.lm_head(self.final_norm(mtp_hidden))
         if labels is not None:
             main_loss = F.cross_entropy(logits.reshape(-1, self.vocab_size), labels.reshape(-1), ignore_index=-100)
-            if mtp_logits is not None:
+            if mtp_logits is not None and (labels[:, 1:-1] != -100).any():
                 mtp_loss = F.cross_entropy(mtp_logits.reshape(-1, self.vocab_size), labels[:, 1:-1].reshape(-1), ignore_index=-100)
             loss = main_loss + self.mtp_weight * mtp_loss + self.aux_weight * aux_loss
         return {"logits": logits, "loss": loss, "main_loss": main_loss,
