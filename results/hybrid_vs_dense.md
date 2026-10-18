@@ -35,7 +35,7 @@ The same evaluator path used the complete `data/cache/tinystories_validation_512
 
 | Model | Total params | Active params | Val CE | Val PPL | Tokens/s | Peak mem | Article test | Train steps / epochs seen |
 |---|---:|---:|---:|---:|---:|---:|---|---|
-| HybridLM | 26,095,380 | 15,773,460 | 1.382765 | 3.9859 | 505,598.2 | 5.076 GiB | 5/5 | 10,000 / ~2.9 (early stop at 10,600) |
+| HybridLM | 26,095,380 | 15,773,460 | 1.382765 | 3.9859 | 505,891 | 5.076 GiB | 5/5 | 10,000 / ~2.9 (early stop at 10,600) |
 | Dense WikiMini | 24,557,120 | 24,557,120 | 1.384790 | 3.9940 | 1,191,558.6 | 3.537 GiB | 5/5 | 6,948 / 2 |
 
 Both checkpoints use the `tokenizer/tinystories_10k` vocabulary of 10,000 tokens. The old ml-workspace dense checkpoint was rejected because it scores CE 7.7 on today's cache with an older tokenizer, so dense was retrained on the same pipeline. The hybrid checkpoint is best at step 10,000, about 2.9 epochs seen, and the dense checkpoint is best at step 6,948, 2 epochs seen. Both runs early-stopped at step 10,600, and hybrid resumed once after the ULTRA hard reset. The train.py hybrid validation loss of 1.90 includes 0.3 x MTP, so only this table's main-head CE is comparable.
