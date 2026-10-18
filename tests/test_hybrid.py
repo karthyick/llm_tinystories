@@ -1,13 +1,33 @@
 import torch
+import subprocess
+import sys
+from pathlib import Path
+import yaml
 
 from src.model.hybrid import HybridLM, Mamba2Mixer, MoESwiGLU
 from src.model.hybrid.mamba2 import _segsum_transition, segsum_scan, sequential_scan
+from src.model.transformer_block import WikiMiniModel
 
 
 def _config():
     return dict(vocab_size=31, d_model=16, n_layers=2, n_heads=2, mamba_heads=2,
                 d_ffn=24, expert_ffn=24, dense_ffn=72, n_experts=2, top_k=1, layer_pattern="MF",
                 max_seq_len=12, dropout=0.0, use_flash_attention=False)
+
+
+def test_train_configs_select_expected_model():
+    root = Path(__file__).parents[1]
+    dense = yaml.safe_load((root / 'config/train_config_tinystories_33M_TOP10K.yaml').read_text())
+    hybrid = yaml.safe_load((root / 'config/train_config_tinystories_hybrid.yaml').read_text())
+    assert isinstance(WikiMiniModel(dense['model']), WikiMiniModel)
+    assert isinstance(HybridLM(hybrid['model']), HybridLM)
+
+
+def test_compare_hybrid_help():
+    result = subprocess.run([sys.executable, 'scripts/compare_hybrid.py', '--help'], capture_output=True, text=True)
+    assert result.returncode == 0
+    for flag in ('--steps', '--d-model', '--device', '--batch-size', '--seq-len', '--out', '--seed'):
+        assert flag in result.stdout
 
 
 def test_mamba_shape_and_causality():

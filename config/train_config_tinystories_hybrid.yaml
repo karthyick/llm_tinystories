@@ -1,5 +1,6 @@
 # NVIDIA Nemotron-H ideas: mostly SSD mixers, sparse shared/routed MoE, MTP.
 model:
+  type: hybrid
   vocab_size: 10000
   d_model: 448
   n_layers: 8
@@ -18,10 +19,39 @@ model:
   tie_embeddings: true
 training:
   batch_size: 64
-  learning_rate: 0.0005
+  num_epochs: 5
+  gradient_accumulation_steps: 4
   use_bf16: true
-  max_steps: 35000
+  use_gradient_checkpointing: false
+  use_compile: false
   logging_steps: 10
   eval_steps: 200
+  eval_samples: 1000
+  early_stopping_patience: 3
   save_steps: 1000
-  device: cuda
+  show_progress: true
+  use_wandb: false
+  output_dir: "./checkpoints"
+optimizer:
+  learning_rate: 0.0005
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  adam_epsilon: 0.00000001
+  weight_decay: 0.1
+  max_grad_norm: 1.0
+scheduler:
+  type: cosine
+  warmup_steps: 100
+  lr_decay_iters: 35000
+  min_lr: 0.00005
+data:
+  dataset: "tinystories"
+  tokenizer_path: "./tokenizer/tinystories_10k"
+  cache_dir: "./data/cache"
+  max_seq_len: 512
+  check_quality: true
+  quality_sample_size: 10000
+  quality_strict: false
+hardware:
+  device: "cuda"
+  num_gpus: 1
