@@ -36,9 +36,9 @@ The same evaluator path used the complete `data/cache/tinystories_validation_512
 | Model | Total params | Active params | Val CE | Val PPL | Tokens/s | Peak mem | Article test | Train steps / epochs seen |
 |---|---:|---:|---:|---:|---:|---:|---|---|
 | HybridLM | 26,095,380 | 15,773,460 | 1.382765 | 3.9859 | 505,598.2 | 5.076 GiB | 5/5 | 10,000 / ~2.9 (early stop at 10,600) |
-| Dense WikiMini | 24,557,120 | 24,557,120 | 7.400091 | 1636.1339 | 1,171,086.6 | 3.537 GiB | 5/5 | 17,370 / 5 |
+| Dense WikiMini | 24,557,120 | 24,557,120 | 1.384790 | 3.9940 | 1,191,558.6 | 3.537 GiB | 5/5 | 6,948 / 2 |
 
-The hybrid stopped early at about 2.9 epochs after resuming once from the epoch-1-end checkpoint following the ULTRA hard reset. The dense checkpoint records epoch 4, which is 5 epochs seen because `train.py` stores zero-based epoch numbers. The README's dense PPL 15.7 and the train-log 6.71 number came from different code paths, so only this table compares the checkpoints.
+Both checkpoints use the `tokenizer/tinystories_10k` vocabulary of 10,000 tokens. The old ml-workspace dense checkpoint was rejected because it scores CE 7.7 on today's cache with an older tokenizer, so dense was retrained on the same pipeline. The hybrid checkpoint is best at step 10,000, about 2.9 epochs seen, and the dense checkpoint is best at step 6,948, 2 epochs seen. Both runs early-stopped at step 10,600, and hybrid resumed once after the ULTRA hard reset. The train.py hybrid validation loss of 1.90 includes 0.3 x MTP, so only this table's main-head CE is comparable.
 
 ### Five enhanced samples per checkpoint
 
@@ -54,12 +54,12 @@ Samples below are the Balanced setting, truncated to 60 generated tokens, from t
 
 #### Dense WikiMini
 
-1. `Once upon a time there was` → Once upon a time there was boy was happy He to on adventure find special. day decided go and the was away his.
-2. `One day, a little girl named Lily` → One day, a little girl named Lily to a. saw's and, she excited ran her. had toy that really.
-3. `In the garden, a small bird` → In the garden, a small bird Chirpy sitting a. Chirp had seen big flying. thought "if could high in sky I fly there.
-4. `A big dog wanted to play with` → A big dog wanted to play with, he not a friend He a who't to. barked and the did stop.
-5. `The happy cat found` → The happy cat found way and happily his was! upon time there a, was girl Lily She to in park day.
+1. `Once upon a time there was` → Once upon a time there was a little girl named Lucy. She liked to play outside in the garden and watch the birds fly by. One day, when she went out on her bike, she saw something strange. There were t...
+2. `One day, a little girl named Lily` → One day, a little girl named Lily went to the park with her mommy. They brought some bread for lunch and cookies to eat. When they arrived at the park, they saw that it was gloomy outside. Lily said...
+3. `In the garden, a small bird` → In the garden, a small bird flew down to Jack and said, "Hi Jack! What's your name?" Jack replied, "My name is Jack. Nice to meet you!" The two of them started talking together for hours about all sor...
+4. `A big dog wanted to play with` → A big dog wanted to play with the little cat. The big dog was not nice. He told the little cat, "You are too small and slow." But the little cat did not want to listen. She wanted to be friends with t...
+5. `The happy cat found` → The happy cat found a new home and was very grateful. From then on, the cat would always look out for other cats who had come to visit and have lots of fun together!Once upon a time there were two fri...
 
 ### Honest reading against section 4
 
-This run meets the section-4 "design wins" quality condition: hybrid PPL is lower and it is faster than dense on the complete validation split. It is not a clean training-budget comparison because hybrid stopped early and the checkpoints came from different training histories. The result supports keeping the hybrid for longer-context and MTP follow-up, while the dense README/train-log discrepancy must not be used as a comparison.
+Quality is a tie: the CE gap is 0.002, inside run noise. Hybrid uses 36% fewer active parameters, but is about 2.3x slower in tokens/s and uses about 1.4x more peak memory because it uses a pure-Torch Mamba-2 scan without a fused kernel. Against section 4, this is the "hybrid PPL within +5% of dense" tie outcome, not a design win. Keep it for long-context and MTP follow-up, where the design has a reason to earn back its current speed and memory cost.

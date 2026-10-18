@@ -75,6 +75,7 @@ def benchmark(path, validation_path, batch_size, device):
     peak_memory = torch.cuda.max_memory_allocated(device) / (1024 ** 3) if device.type == "cuda" else 0.0
     ce = loss_sum / token_count
     return {
+        "sequences": len(cached["input_ids"]),
         "model": "HybridLM" if isinstance(model, HybridLM) else "Dense WikiMini",
         "total": total,
         "active": active,
@@ -102,7 +103,7 @@ def main():
         benchmark(args.hybrid_checkpoint, args.validation, args.batch_size, device),
         benchmark(args.dense_checkpoint, args.validation, args.batch_size, device),
     ]
-    print(f"validation={args.validation} sequences={8961} batch_size={args.batch_size} device={device} autocast=bf16")
+    print(f"validation={args.validation} sequences={results[0]['sequences']} batch_size={args.batch_size} device={device} autocast=bf16")
     print("model | total_params | active_params | val_ce | val_ppl | tokens/s | peak_mem_GiB | train_step | epoch")
     for result in results:
         print(f"{result['model']} | {result['total']:,} | {result['active']:,} | "
