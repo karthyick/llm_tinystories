@@ -33,6 +33,7 @@ from tqdm import tqdm
 from datetime import datetime
 
 from src.model.transformer_block import WikiMiniModel
+from src.model.hybrid import HybridLM
 from src.data.dataset import TinyStoriesDataset, create_dataloaders
 from src.data.tokenizer import load_tokenizer
 from src.data.quality_checker import check_dataset_quality
@@ -461,6 +462,9 @@ class Trainer:
         # Return standard training metrics
         return {
             'loss': actual_loss,
+            'main_loss': float(outputs.get('main_loss', outputs['loss']).detach().item()),
+            'mtp_loss': float(outputs.get('mtp_loss', outputs['loss'].new_zeros(())).detach().item()),
+            'aux_loss': float(outputs.get('aux_loss', outputs['loss'].new_zeros(())).detach().item()),
             'perplexity': perplexity,
             'grad_norm': grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm,
             'lr': self.scheduler.get_last_lr()[0],
@@ -798,6 +802,7 @@ class Trainer:
                 logger.info(
                     f"\nStep {self.global_step} | "
                     f"Loss: {metrics['loss']:.4f} ({loss_trend}) | "
+                    f"Main: {metrics['main_loss']:.4f} | MTP: {metrics['mtp_loss']:.4f} | Aux: {metrics['aux_loss']:.4f} | "
                     f"PPL: {metrics['perplexity']:.2f} | "
                     f"Grad: {metrics['grad_norm']:.2f}\n"
                     f"LR: {metrics['lr']:.2e} ({lr_phase}) | "
@@ -1017,7 +1022,8 @@ def main():
 
         # Create model
         logger.info("Creating model...")
-        model = WikiMiniModel(config['model'])
+        model_class = HybridLM if config['model'].get('type', 'dense') == 'hybrid' else WikiMiniModel
+        model = model_class(config['model'])
 
         # Count parameters
         num_params = count_parameters(model)

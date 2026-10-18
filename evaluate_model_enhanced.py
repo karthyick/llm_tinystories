@@ -24,6 +24,7 @@ import re
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.model.transformer_block import WikiMiniModel
+from src.model.hybrid import HybridLM
 from src.data.tokenizer import load_tokenizer
 
 # Color codes
@@ -89,7 +90,9 @@ def load_model_and_tokenizer(checkpoint_path: str, device: str = 'cuda'):
     tokenizer = load_tokenizer(tokenizer_path)
     print(f"{Colors.OKGREEN}✓ Tokenizer loaded (vocab: {tokenizer.vocab_size:,}){Colors.ENDC}")
 
-    model = WikiMiniModel(config.get('model', {}))
+    model_config = config.get('model', {})
+    model_class = HybridLM if model_config.get('type') == 'hybrid' else WikiMiniModel
+    model = model_class(model_config)
     model.load_state_dict(model_state)
     model.to(device)
     model.eval()
@@ -138,7 +141,7 @@ def generate_story_enhanced(
     with torch.no_grad():
         for _ in range(max_length - len(input_ids[0])):
             outputs = model(input_ids)
-            logits = outputs['logits']
+            logits = outputs['logits'] if isinstance(outputs, dict) else outputs
             next_token_logits = logits[0, -1, :].clone()
 
             # Apply repetition penalty

@@ -18,3 +18,7 @@ __all__ = [
     "TransformerBlock",
     "WikiMiniModel",
 ]
+# Hybrid architecture is optional and leaves WikiMini behavior unchanged.
+from .hybrid import HybridLM, Mamba2Mixer, MoESwiGLU
+
+__all__ += ["HybridLM", "Mamba2Mixer", "MoESwiGLU"]

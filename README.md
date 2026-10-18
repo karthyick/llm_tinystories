@@ -615,3 +615,7 @@ Verifies:
 **Status: Production Ready ✅ | Article Generation: 100% Success Rate 🎉**
 
 *Last Updated: 2025-10-26*
+
+## Hybrid (NVIDIA-style) model
+
+`HybridLM` adds a configurable Mamba-2/attention layer pattern, top-k SwiGLU MoE with a shared expert, and an auxiliary t+2 prediction head. See [the design note](docs/HYBRID_DESIGN.md) and `config/train_config_tinystories_hybrid.yaml`.
