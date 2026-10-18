@@ -9,6 +9,39 @@ from src.model.hybrid.mamba2 import _segsum_transition, segsum_scan, sequential_
 from src.model.transformer_block import WikiMiniModel
 
 
+def test_enhanced_evaluator_uses_checkpoint_model_type(monkeypatch):
+    import evaluate_model_enhanced as evaluator
+
+    class FakeTokenizer:
+        vocab_size = 31
+
+    class FakeModel:
+        def __init__(self, config):
+            self.config = config
+
+        def load_state_dict(self, state):
+            pass
+
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+        def parameters(self):
+            return iter(())
+
+    monkeypatch.setattr(evaluator, "HybridLM", FakeModel)
+    monkeypatch.setattr(evaluator, "WikiMiniModel", FakeModel)
+    monkeypatch.setattr(evaluator, "load_tokenizer", lambda path: FakeTokenizer())
+    monkeypatch.setattr(evaluator.torch, "load", lambda *args, **kwargs: {
+        "config": {"model": {"type": "hybrid"}, "data": {}},
+        "model_state_dict": {},
+    })
+    model, _, _ = evaluator.load_model_and_tokenizer("checkpoint.pth", "cpu")
+    assert model.config["type"] == "hybrid"
+
+
 def _config():
     return dict(vocab_size=31, d_model=16, n_layers=2, n_heads=2, mamba_heads=2,
                 d_ffn=24, expert_ffn=24, dense_ffn=72, n_experts=2, top_k=1, layer_pattern="MF",
